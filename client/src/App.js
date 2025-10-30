@@ -9,7 +9,7 @@ function App() {
   const [loading, setLoading] = useState(false);
 
   // API 기본 URL
-  const API_URL = 'http://localhost:5001/api';
+  const API_URL = 'http://20.63.25.94:5001/api';
 
   // 성도 목록 조회
   const fetchMembers = async () => {
