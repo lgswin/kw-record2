@@ -5,6 +5,6 @@ module.exports = {
     password: 'ads123',
     database: 'kwchurchdb'
   },
-  port: 5000
+  port: 5001
 };
 
