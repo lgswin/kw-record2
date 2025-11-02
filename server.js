@@ -100,7 +100,7 @@ app.post('/api/members', async (req, res) => {
   try {
     await connection.beginTransaction();
     
-    const { name, phone, address, gender, birth_date, baptized, baptism_date, registration_date, 
+    const { name, phone, address, gender, birth_date, baptized, baptized_type, baptism_date, registration_date, 
             office_ids, family_ids, party_ids, department_ids } = req.body;
     
     if (!name || !phone) {
@@ -109,8 +109,8 @@ app.post('/api/members', async (req, res) => {
 
     // 성도 추가
     const [result] = await connection.execute(
-      'INSERT INTO members (name, phone, address, gender, birth_date, baptized, baptism_date, registration_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [name, phone, address || null, gender || null, birth_date || null, baptized || false, baptism_date || null, registration_date || null]
+      'INSERT INTO members (name, phone, address, gender, birth_date, baptized, baptized_type, baptism_date, registration_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [name, phone, address || null, gender || null, birth_date || null, baptized || false, baptized_type || null, baptism_date || null, registration_date || null]
     );
     
     const memberId = result.insertId;
@@ -179,7 +179,7 @@ app.put('/api/members/:id', async (req, res) => {
     await connection.beginTransaction();
     
     const { id } = req.params;
-    const { name, phone, address, gender, birth_date, baptized, baptism_date, registration_date,
+    const { name, phone, address, gender, birth_date, baptized, baptized_type, baptism_date, registration_date,
             office_ids, family_ids, party_ids, department_ids } = req.body;
     
     if (!name || !phone) {
@@ -188,8 +188,8 @@ app.put('/api/members/:id', async (req, res) => {
 
     // 성도 기본 정보 수정
     const [result] = await connection.execute(
-      'UPDATE members SET name = ?, phone = ?, address = ?, gender = ?, birth_date = ?, baptized = ?, baptism_date = ?, registration_date = ? WHERE id = ?',
-      [name, phone, address || null, gender || null, birth_date || null, baptized || false, baptism_date || null, registration_date || null, id]
+      'UPDATE members SET name = ?, phone = ?, address = ?, gender = ?, birth_date = ?, baptized = ?, baptized_type = ?, baptism_date = ?, registration_date = ? WHERE id = ?',
+      [name, phone, address || null, gender || null, birth_date || null, baptized || false, baptized_type || null, baptism_date || null, registration_date || null, id]
     );
     
     if (result.affectedRows === 0) {
@@ -343,6 +343,57 @@ app.post('/api/families', async (req, res) => {
   }
 });
 
+// 가족 수정
+app.put('/api/families/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { family_name, member_ids } = req.body;
+    
+    if (!family_name) {
+      return res.status(400).json({ error: '가족명은 필수입니다.' });
+    }
+
+    const connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    try {
+      // 가족명 수정
+      await connection.execute(
+        'UPDATE families SET family_name = ? WHERE id = ?',
+        [family_name, id]
+      );
+
+      // 기존 구성원 관계 삭제
+      await connection.execute('DELETE FROM member_families WHERE family_id = ?', [id]);
+
+      // 새로운 구성원 관계 추가
+      if (member_ids && Array.isArray(member_ids) && member_ids.length > 0) {
+        for (const memberId of member_ids) {
+          await connection.execute(
+            'INSERT INTO member_families (member_id, family_id) VALUES (?, ?)',
+            [memberId, id]
+          );
+        }
+      }
+
+      await connection.commit();
+      res.json({ 
+        id: parseInt(id), 
+        family_name,
+        message: '가족 정보가 성공적으로 수정되었습니다.' 
+      });
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error('가족 수정 오류:', error);
+    res.status(500).json({ error: '가족 정보 수정에 실패했습니다.' });
+  }
+});
+
 // 가족 삭제
 app.delete('/api/families/:id', async (req, res) => {
   try {
@@ -427,6 +478,57 @@ app.post('/api/parties', async (req, res) => {
   } catch (error) {
     console.error('순모임 추가 오류:', error);
     res.status(500).json({ error: '순모임 추가에 실패했습니다.' });
+  }
+});
+
+// 순모임 수정
+app.put('/api/parties/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { party_name, leader_id, member_ids } = req.body;
+    
+    if (!party_name) {
+      return res.status(400).json({ error: '순명은 필수입니다.' });
+    }
+
+    const connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    try {
+      // 순모임 정보 수정
+      await connection.execute(
+        'UPDATE parties SET party_name = ?, leader_id = ? WHERE id = ?',
+        [party_name, leader_id || null, id]
+      );
+
+      // 기존 순원 관계 삭제
+      await connection.execute('DELETE FROM member_parties WHERE party_id = ?', [id]);
+
+      // 새로운 순원 관계 추가
+      if (member_ids && Array.isArray(member_ids) && member_ids.length > 0) {
+        for (const memberId of member_ids) {
+          await connection.execute(
+            'INSERT INTO member_parties (member_id, party_id) VALUES (?, ?)',
+            [memberId, id]
+          );
+        }
+      }
+
+      await connection.commit();
+      res.json({ 
+        id: parseInt(id), 
+        party_name,
+        message: '순모임 정보가 성공적으로 수정되었습니다.' 
+      });
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error('순모임 수정 오류:', error);
+    res.status(500).json({ error: '순모임 정보 수정에 실패했습니다.' });
   }
 });
 
@@ -529,6 +631,65 @@ app.post('/api/departments', async (req, res) => {
   } catch (error) {
     console.error('부서 추가 오류:', error);
     res.status(500).json({ error: '부서 추가에 실패했습니다.' });
+  }
+});
+
+// 부서 수정
+app.put('/api/departments/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { department_name, president_id, vice_president_id, secretary_id, treasurer_id, clerk_id, member_ids } = req.body;
+    
+    if (!department_name) {
+      return res.status(400).json({ error: '부서명은 필수입니다.' });
+    }
+
+    const connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    try {
+      // 부서 정보 수정
+      await connection.execute(
+        'UPDATE departments SET department_name = ?, president_id = ?, vice_president_id = ?, secretary_id = ?, treasurer_id = ?, clerk_id = ? WHERE id = ?',
+        [
+          department_name,
+          president_id || null,
+          vice_president_id || null,
+          secretary_id || null,
+          treasurer_id || null,
+          clerk_id || null,
+          id
+        ]
+      );
+
+      // 기존 부서원 관계 삭제
+      await connection.execute('DELETE FROM member_departments WHERE department_id = ?', [id]);
+
+      // 새로운 부서원 관계 추가
+      if (member_ids && Array.isArray(member_ids) && member_ids.length > 0) {
+        for (const memberId of member_ids) {
+          await connection.execute(
+            'INSERT INTO member_departments (member_id, department_id) VALUES (?, ?)',
+            [memberId, id]
+          );
+        }
+      }
+
+      await connection.commit();
+      res.json({ 
+        id: parseInt(id), 
+        department_name,
+        message: '부서 정보가 성공적으로 수정되었습니다.' 
+      });
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error('부서 수정 오류:', error);
+    res.status(500).json({ error: '부서 정보 수정에 실패했습니다.' });
   }
 });
 

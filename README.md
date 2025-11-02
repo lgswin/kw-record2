@@ -113,73 +113,89 @@ chmod +x start.sh
 
 ## 🚀 Azure VM 배포 방법
 
-### 1단계: 프로젝트 파일 업로드
+상세한 배포 가이드는 **[DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)** 파일을 참조하세요.
 
-#### 방법 1: SCP 사용
+### 빠른 배포 가이드
+
+#### 1단계: VM 접속
 ```bash
-# SSH 키 파일을 사용한 업로드
-scp -i /path/to/your-key.pem -r /path/to/kw-record2 azureuser@your-vm-ip:/home/azureuser/
-
-# 예시
-scp -i ~/.ssh/kwchurchr-record-new.pem -r /Users/gslee/Documents/kw-record2 azureuser@20.63.25.94:/home/azureuser/
-
-# SSH 키 파일 권한 설정 (필요시)
-chmod 400 /path/to/your-key.pem
+ssh -i ~/.ssh/kwchurchr-record-new.pem azureuser@<VM-IP>
 ```
 
-#### 방법 2: Git 사용
+#### 2단계: MySQL 설치 및 설정
 ```bash
-# Azure VM에서 실행
-git clone <your-repo-url>
-cd kw-record2
+sudo apt update
+sudo apt install -y mysql-server
+sudo mysql_secure_installation  # root 비밀번호: ads123
+mysql -u root -pads123 -e "CREATE DATABASE kwchurchdb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 ```
 
-### 2단계: Node.js 및 MySQL 설치
-
+#### 3단계: Node.js 설치
 ```bash
-# Node.js 18.x 설치
+# Node.js 18.x 저장소 추가 및 설치
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
 sudo apt-get install -y nodejs
 
-# MySQL 설치 (아직 설치되지 않은 경우)
-sudo apt update
-sudo apt install mysql-server -y
+# 설치 확인
+node --version  # v18.x.x 이상
+npm --version   # 9.x.x 이상
+
+# PM2 설치 (백그라운드 실행용)
+sudo npm install -g pm2
+pm2 --version
 ```
 
-### 3단계: 프로젝트 설정
-
+#### 4단계: GitHub 저장소 클론 및 설정
 ```bash
+# Git 설치 확인
+git --version || sudo apt install -y git
+
+# GitHub 저장소 클론
+cd ~
+git clone <your-github-repo-url> kw-record2
 cd kw-record2
 
 # 의존성 설치
 npm install
 cd client && npm install && cd ..
-
-# 데이터베이스 초기화
-mysql -u root -p < initi.sql
 ```
 
-### 4단계: 애플리케이션 실행
+**상세 배포 가이드**: [DEPLOY_GITHUB.md](./DEPLOY_GITHUB.md) 참조
 
+#### 5단계: 데이터베이스 초기화
 ```bash
-# 개발 환경에서 실행
-npm run dev & npm run client
+mysql -u root -pads123 kwchurchdb < initi.sql
+```
 
-# 또는 프로덕션 빌드
+#### 6단계: 방화벽 설정 (선택사항)
+
+**⚠️ 방화벽 설정은 선택사항입니다. Azure NSG로 포트 관리하면 충분합니다.**
+
+**방화벽 설정 안 함 (권장):**
+```bash
+# 이 단계를 건너뛰세요
+# Azure Portal → VM → Networking → NSG에서 포트 규칙 설정
+```
+
+**방화벽 설정을 원하는 경우:**
+```bash
+sudo ufw allow 22/tcp
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw allow 5001/tcp
+sudo ufw allow 3000/tcp
+sudo ufw --force enable
+```
+
+#### 7단계: 애플리케이션 실행
+```bash
+# 프로덕션 빌드
 cd client && npm run build && cd ..
-NODE_ENV=production node server.js
-```
 
-### 5단계: PM2로 백그라운드 실행 (권장)
-
-```bash
-# PM2 설치
-sudo npm install -g pm2
-
-# 백엔드 서버 실행
-pm2 start server.js --name "kw-church-api"
-
-# 프론트엔드는 별도로 실행하거나 빌드하여 서빙
+# PM2로 백그라운드 실행
+pm2 start server.js --name "kw-church-api" --env production
+pm2 save
+pm2 startup
 ```
 
 ## 🔒 보안 설정

@@ -488,6 +488,60 @@
   font-size: 14px;
 }
 
+/* 성도 목록 - 테이블 형태 */
+.members-table-container {
+  overflow-x: auto;
+  margin-top: 20px;
+}
+
+.members-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.members-table thead {
+  background: #3498db;
+  color: white;
+}
+
+.members-table th {
+  padding: 12px 8px;
+  text-align: center;
+  font-weight: 600;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.members-table td {
+  padding: 12px 8px;
+  border-bottom: 1px solid #e0e0e0;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.members-table tbody tr:hover {
+  background-color: #f5f5f5;
+}
+
+.members-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.members-table td {
+  color: #2c3e50;
+}
+
+.member-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+/* 카드 형태 (가족, 순모임, 부서용 - 유지) */
 .members-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -525,13 +579,6 @@
   font-size: 0.9rem;
 }
 
-.member-actions {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-  margin-top: 15px;
-}
-
 @media (max-width: 768px) {
   .App-header h1 {
     font-size: 2rem;
@@ -563,6 +610,19 @@
   
   .members-list {
     grid-template-columns: 1fr;
+  }
+  
+  .members-table-container {
+    overflow-x: scroll;
+  }
+  
+  .members-table {
+    font-size: 0.8rem;
+  }
+  
+  .members-table th,
+  .members-table td {
+    padding: 8px 4px;
   }
   
   .form-actions {

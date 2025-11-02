@@ -59,7 +59,7 @@ function MemberManagement() {
   const [departments, setDepartments] = useState([]);
   const [formData, setFormData] = useState({
     name: '', phone: '', address: '', gender: '',
-    birth_date: '', baptized: false, baptism_date: '', registration_date: '',
+    birth_date: '', baptized_type: '', baptism_date: '', registration_date: '',
     office_ids: [], family_ids: [], party_ids: [], department_ids: []
   });
   const [editingId, setEditingId] = useState(null);
@@ -249,8 +249,9 @@ function MemberManagement() {
         address: formData.address || null,
         gender: formData.gender || null,
         birth_date: formData.birth_date || null,
-        baptized: formData.baptized === true || formData.baptized === 'true',
-        baptism_date: formData.baptism_date || null,
+        baptized: formData.baptized_type !== '' && formData.baptized_type !== '세례 안받음',
+        baptized_type: formData.baptized_type || null,
+        baptism_date: formData.baptized_type !== '' && formData.baptized_type !== '세례 안받음' ? (formData.baptism_date || null) : null,
         registration_date: formData.registration_date || null,
         office_ids: formData.office_ids || [],
         family_ids: formData.family_ids || [],
@@ -269,7 +270,7 @@ function MemberManagement() {
       
       setFormData({
         name: '', phone: '', address: '', gender: '',
-        birth_date: '', baptized: false, baptism_date: '', registration_date: '',
+        birth_date: '', baptized_type: '', baptism_date: '', registration_date: '',
         office_ids: [], family_ids: [], party_ids: [], department_ids: []
       });
       fetchMembers();
@@ -286,7 +287,7 @@ function MemberManagement() {
       address: member.address || '',
       gender: member.gender || '',
       birth_date: member.birth_date || '',
-      baptized: member.baptized || false,
+      baptized_type: member.baptized_type || (member.baptized ? '세례' : '세례 안받음'),
       baptism_date: member.baptism_date || '',
       registration_date: member.registration_date || '',
       office_ids: member.offices ? member.offices.map(o => o.id) : [],
@@ -302,7 +303,7 @@ function MemberManagement() {
   const handleCancelEdit = () => {
     setFormData({
       name: '', phone: '', address: '', gender: '',
-      birth_date: '', baptized: false, baptism_date: '', registration_date: '',
+      birth_date: '', baptized_type: '', baptism_date: '', registration_date: '',
       office_ids: [], family_ids: [], party_ids: [], department_ids: []
     });
     setEditingId(null);
@@ -361,23 +362,23 @@ function MemberManagement() {
             <div className="form-row form-row-3">
               <div className="form-group">
                 <label>세례 여부</label>
-                <div className="checkbox-container">
-                  <input 
-                    type="checkbox" 
-                    name="baptized" 
-                    id="baptized"
-                    checked={formData.baptized} 
-                    onChange={handleInputChange}
-                    className="checkbox-large"
-                  />
-                  <label htmlFor="baptized" className="checkbox-label-large">
-                    {formData.baptized ? '세례 받음' : '세례 안 받음'}
-                  </label>
-                </div>
+                <select name="baptized_type" value={formData.baptized_type} onChange={handleInputChange}>
+                  <option value="">선택</option>
+                  <option value="유아세례">유아세례</option>
+                  <option value="입교">입교</option>
+                  <option value="세례">세례</option>
+                  <option value="세례 안받음">세례 안받음</option>
+                </select>
               </div>
               <div className="form-group">
                 <label>세례일자</label>
-                <input type="date" name="baptism_date" value={formData.baptism_date} onChange={handleInputChange} disabled={!formData.baptized} />
+                <input 
+                  type="date" 
+                  name="baptism_date" 
+                  value={formData.baptism_date} 
+                  onChange={handleInputChange} 
+                  disabled={formData.baptized_type === '' || formData.baptized_type === '세례 안받음'} 
+                />
               </div>
               <div className="form-group">
                 <label>등록일</label>
@@ -607,35 +608,46 @@ function MemberManagement() {
             return <p>{searchKeyword ? '검색 결과가 없습니다.' : '등록된 성도가 없습니다.'}</p>;
           } else {
             return (
-              <div className="members-list">
-                {filteredMembers.map(member => (
-              <div key={member.id} className="member-card">
-                <div className="member-info">
-                  <h3>{member.name}</h3>
-                  <p>{member.phone}</p>
-                  {member.address && <p>주소: {member.address}</p>}
-                  {member.gender && <p>성별: {member.gender === 'M' ? '남성' : '여성'}</p>}
-                  {member.birth_date && <p>생년월일: {member.birth_date}</p>}
-                  {member.offices && member.offices.length > 0 && (
-                    <p><strong>직분:</strong> {member.offices.map(o => o.office_name).join(', ')}</p>
-                  )}
-                  {member.families && member.families.length > 0 && (
-                    <p><strong>가족:</strong> {member.families.map(f => f.family_name).join(', ')}</p>
-                  )}
-                  {member.parties && member.parties.length > 0 && (
-                    <p><strong>순모임:</strong> {member.parties.map(p => p.party_name).join(', ')}</p>
-                  )}
-                  {member.departments && member.departments.length > 0 && (
-                    <p><strong>부서:</strong> {member.departments.map(d => d.department_name).join(', ')}</p>
-                  )}
-                  <small>등록일: {new Date(member.created_at).toLocaleDateString()}</small>
-                </div>
-                <div className="member-actions">
-                  <button onClick={() => handleEdit(member)} className="btn btn-edit">수정</button>
-                  <button onClick={() => handleDelete(member.id)} className="btn btn-delete">삭제</button>
-                </div>
-              </div>
-                ))}
+              <div className="members-table-container">
+                <table className="members-table">
+                  <thead>
+                    <tr>
+                      <th>이름</th>
+                      <th>전화번호</th>
+                      <th>주소</th>
+                      <th>성별</th>
+                      <th>생년월일</th>
+                      <th>직분</th>
+                      <th>가족</th>
+                      <th>순모임</th>
+                      <th>부서</th>
+                      <th>등록일</th>
+                      <th>작업</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredMembers.map(member => (
+                      <tr key={member.id}>
+                        <td>{member.name}</td>
+                        <td>{member.phone}</td>
+                        <td>{member.address || '-'}</td>
+                        <td>{member.gender === 'M' ? '남성' : member.gender === 'F' ? '여성' : '-'}</td>
+                        <td>{member.birth_date ? new Date(member.birth_date).toLocaleDateString() : '-'}</td>
+                        <td>{member.offices && member.offices.length > 0 ? member.offices.map(o => o.office_name).join(', ') : '-'}</td>
+                        <td>{member.families && member.families.length > 0 ? member.families.map(f => f.family_name).join(', ') : '-'}</td>
+                        <td>{member.parties && member.parties.length > 0 ? member.parties.map(p => p.party_name).join(', ') : '-'}</td>
+                        <td>{member.departments && member.departments.length > 0 ? member.departments.map(d => d.department_name).join(', ') : '-'}</td>
+                        <td>{new Date(member.created_at).toLocaleDateString()}</td>
+                        <td>
+                          <div className="member-actions">
+                            <button onClick={() => handleEdit(member)} className="btn btn-edit">수정</button>
+                            <button onClick={() => handleDelete(member.id)} className="btn btn-delete">삭제</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             );
           }
@@ -670,6 +682,7 @@ function FamilyManagement() {
   const [memberSearchInput, setMemberSearchInput] = useState('');
   const [showMemberDropdown, setShowMemberDropdown] = useState(false);
   const [familySearchKeyword, setFamilySearchKeyword] = useState('');
+  const [editingId, setEditingId] = useState(null);
 
   useEffect(() => {
     fetchFamilies();
@@ -762,6 +775,26 @@ function FamilyManagement() {
     return (Array.isArray(members) ? members : []).filter(member => selectedIds.includes(member.id));
   };
 
+  const handleEdit = (family) => {
+    setEditingId(family.id);
+    setFormData({
+      family_name: family.family_name,
+      member_ids: family.members ? 
+        (Array.isArray(members) ? members : [])
+          .filter(m => family.members.includes(m.name))
+          .map(m => m.id) : []
+    });
+    setMemberSearchInput('');
+    setShowMemberDropdown(false);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setFormData({ family_name: '', member_ids: [] });
+    setMemberSearchInput('');
+    setShowMemberDropdown(false);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.family_name.trim()) {
@@ -770,15 +803,21 @@ function FamilyManagement() {
     }
 
     try {
-      await axios.post(`${API_URL}/families`, formData);
-      alert('가족이 등록되었습니다.');
+      if (editingId) {
+        await axios.put(`${API_URL}/families/${editingId}`, formData);
+        alert('가족 정보가 수정되었습니다.');
+      } else {
+        await axios.post(`${API_URL}/families`, formData);
+        alert('가족이 등록되었습니다.');
+      }
       setFormData({ family_name: '', member_ids: [] });
       setMemberSearchInput('');
       setShowMemberDropdown(false);
+      setEditingId(null);
       fetchFamilies();
     } catch (error) {
-      console.error('가족 등록 오류:', error);
-      alert('등록에 실패했습니다.');
+      console.error(editingId ? '가족 수정 오류:' : '가족 등록 오류:', error);
+      alert(editingId ? '수정에 실패했습니다.' : '등록에 실패했습니다.');
     }
   };
 
@@ -797,7 +836,7 @@ function FamilyManagement() {
   return (
     <div>
       <section className="form-section">
-        <h2>새 가족 등록</h2>
+        <h2>{editingId ? '가족 정보 수정' : '새 가족 등록'}</h2>
         <form onSubmit={handleSubmit} className="member-form">
           <div className="form-group">
             <label>가족명 *</label>
@@ -844,7 +883,8 @@ function FamilyManagement() {
             </div>
           </div>
           <div className="form-actions">
-            <button type="submit" className="btn btn-primary">등록</button>
+            <button type="submit" className="btn btn-primary">{editingId ? '수정' : '등록'}</button>
+            {editingId && <button type="button" onClick={handleCancelEdit} className="btn btn-secondary">취소</button>}
           </div>
         </form>
       </section>
@@ -878,19 +918,32 @@ function FamilyManagement() {
             return <p>{familySearchKeyword ? '검색 결과가 없습니다.' : '등록된 가족이 없습니다.'}</p>;
           } else {
             return (
-              <div className="members-list">
-                {filteredFamilies.map(family => (
-              <div key={family.id} className="member-card">
-                <div className="member-info">
-                  <h3>{family.family_name}</h3>
-                  {family.members && <p>구성원: {family.members}</p>}
-                  <small>등록일: {new Date(family.created_at).toLocaleDateString()}</small>
-                </div>
-                <div className="member-actions">
-                  <button onClick={() => handleDelete(family.id)} className="btn btn-delete">삭제</button>
-                </div>
-              </div>
-                ))}
+              <div className="members-table-container">
+                <table className="members-table">
+                  <thead>
+                    <tr>
+                      <th>가족명</th>
+                      <th>구성원</th>
+                      <th>등록일</th>
+                      <th>작업</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredFamilies.map(family => (
+                      <tr key={family.id}>
+                        <td>{family.family_name}</td>
+                        <td>{family.members || '-'}</td>
+                        <td>{new Date(family.created_at).toLocaleDateString()}</td>
+                        <td>
+                          <div className="member-actions">
+                            <button onClick={() => handleEdit(family)} className="btn btn-edit">수정</button>
+                            <button onClick={() => handleDelete(family.id)} className="btn btn-delete">삭제</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             );
           }
@@ -919,6 +972,7 @@ function PartyManagement() {
   const [memberSearchInput, setMemberSearchInput] = useState('');
   const [showMemberDropdown, setShowMemberDropdown] = useState(false);
   const [partySearchKeyword, setPartySearchKeyword] = useState('');
+  const [editingId, setEditingId] = useState(null);
 
   useEffect(() => {
     fetchParties();
@@ -1011,6 +1065,30 @@ function PartyManagement() {
     return (Array.isArray(members) ? members : []).filter(member => selectedIds.includes(member.id));
   };
 
+  const handleEdit = (party) => {
+    setEditingId(party.id);
+    // members 문자열을 파싱하여 member_ids 추출
+    const memberNames = party.members ? party.members.split(',').map(m => m.trim()) : [];
+    const partyMemberIds = (Array.isArray(members) ? members : [])
+      .filter(m => memberNames.includes(m.name))
+      .map(m => m.id);
+    
+    setFormData({
+      party_name: party.party_name,
+      leader_id: party.leader_id || '',
+      member_ids: partyMemberIds
+    });
+    setMemberSearchInput('');
+    setShowMemberDropdown(false);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setFormData({ party_name: '', leader_id: '', member_ids: [] });
+    setMemberSearchInput('');
+    setShowMemberDropdown(false);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.party_name.trim()) {
@@ -1019,15 +1097,21 @@ function PartyManagement() {
     }
 
     try {
-      await axios.post(`${API_URL}/parties`, formData);
-      alert('순모임이 등록되었습니다.');
+      if (editingId) {
+        await axios.put(`${API_URL}/parties/${editingId}`, formData);
+        alert('순모임 정보가 수정되었습니다.');
+      } else {
+        await axios.post(`${API_URL}/parties`, formData);
+        alert('순모임이 등록되었습니다.');
+      }
       setFormData({ party_name: '', leader_id: '', member_ids: [] });
       setMemberSearchInput('');
       setShowMemberDropdown(false);
+      setEditingId(null);
       fetchParties();
     } catch (error) {
-      console.error('순모임 등록 오류:', error);
-      alert('등록에 실패했습니다.');
+      console.error(editingId ? '순모임 수정 오류:' : '순모임 등록 오류:', error);
+      alert(editingId ? '수정에 실패했습니다.' : '등록에 실패했습니다.');
     }
   };
 
@@ -1046,7 +1130,7 @@ function PartyManagement() {
   return (
     <div>
       <section className="form-section">
-        <h2>새 순모임 등록</h2>
+        <h2>{editingId ? '순모임 정보 수정' : '새 순모임 등록'}</h2>
         <form onSubmit={handleSubmit} className="member-form">
           <div className="form-group">
             <label>순명 *</label>
@@ -1102,7 +1186,8 @@ function PartyManagement() {
             </div>
           </div>
           <div className="form-actions">
-            <button type="submit" className="btn btn-primary">등록</button>
+            <button type="submit" className="btn btn-primary">{editingId ? '수정' : '등록'}</button>
+            {editingId && <button type="button" onClick={handleCancelEdit} className="btn btn-secondary">취소</button>}
           </div>
         </form>
       </section>
@@ -1137,20 +1222,34 @@ function PartyManagement() {
             return <p>{partySearchKeyword ? '검색 결과가 없습니다.' : '등록된 순모임이 없습니다.'}</p>;
           } else {
             return (
-              <div className="members-list">
-                {filteredParties.map(party => (
-              <div key={party.id} className="member-card">
-                <div className="member-info">
-                  <h3>{party.party_name}</h3>
-                  {party.leader_name && <p>순장: {party.leader_name}</p>}
-                  {party.members && <p>순원: {party.members}</p>}
-                  <small>등록일: {new Date(party.created_at).toLocaleDateString()}</small>
-                </div>
-                <div className="member-actions">
-                  <button onClick={() => handleDelete(party.id)} className="btn btn-delete">삭제</button>
-                </div>
-              </div>
-                ))}
+              <div className="members-table-container">
+                <table className="members-table">
+                  <thead>
+                    <tr>
+                      <th>순모임명</th>
+                      <th>순장</th>
+                      <th>순원</th>
+                      <th>등록일</th>
+                      <th>작업</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredParties.map(party => (
+                      <tr key={party.id}>
+                        <td>{party.party_name}</td>
+                        <td>{party.leader_name || '-'}</td>
+                        <td>{party.members || '-'}</td>
+                        <td>{new Date(party.created_at).toLocaleDateString()}</td>
+                        <td>
+                          <div className="member-actions">
+                            <button onClick={() => handleEdit(party)} className="btn btn-edit">수정</button>
+                            <button onClick={() => handleDelete(party.id)} className="btn btn-delete">삭제</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             );
           }
@@ -1194,6 +1293,7 @@ function DepartmentManagement() {
   const [showPositionDropdowns, setShowPositionDropdowns] = useState({
     president: false, vice_president: false, secretary: false, treasurer: false, clerk: false
   });
+  const [editingId, setEditingId] = useState(null);
 
   useEffect(() => {
     fetchDepartments();
@@ -1363,6 +1463,46 @@ function DepartmentManagement() {
     return (Array.isArray(members) ? members : []).find(member => member.id === selectedId);
   };
 
+  const handleEdit = (department) => {
+    setEditingId(department.id);
+    // members 문자열을 파싱하여 member_ids 추출
+    const memberNames = department.members ? department.members.split(',').map(m => m.trim()) : [];
+    const departmentMemberIds = (Array.isArray(members) ? members : [])
+      .filter(m => memberNames.includes(m.name))
+      .map(m => m.id);
+    
+    setFormData({
+      department_name: department.department_name,
+      president_id: department.president_id || '',
+      vice_president_id: department.vice_president_id || '',
+      secretary_id: department.secretary_id || '',
+      treasurer_id: department.treasurer_id || '',
+      clerk_id: department.clerk_id || '',
+      member_ids: departmentMemberIds
+    });
+    setMemberSearchInput('');
+    setShowMemberDropdown(false);
+    setPositionSearchInputs({ president: '', vice_president: '', secretary: '', treasurer: '', clerk: '' });
+    setShowPositionDropdowns({ president: false, vice_president: false, secretary: false, treasurer: false, clerk: false });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setFormData({ 
+      department_name: '', 
+      president_id: '', 
+      vice_president_id: '', 
+      secretary_id: '', 
+      treasurer_id: '', 
+      clerk_id: '', 
+      member_ids: [] 
+    });
+    setMemberSearchInput('');
+    setShowMemberDropdown(false);
+    setPositionSearchInputs({ president: '', vice_president: '', secretary: '', treasurer: '', clerk: '' });
+    setShowPositionDropdowns({ president: false, vice_president: false, secretary: false, treasurer: false, clerk: false });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.department_name.trim()) {
@@ -1371,8 +1511,13 @@ function DepartmentManagement() {
     }
 
     try {
-      await axios.post(`${API_URL}/departments`, formData);
-      alert('부서가 등록되었습니다.');
+      if (editingId) {
+        await axios.put(`${API_URL}/departments/${editingId}`, formData);
+        alert('부서 정보가 수정되었습니다.');
+      } else {
+        await axios.post(`${API_URL}/departments`, formData);
+        alert('부서가 등록되었습니다.');
+      }
       setFormData({ 
         department_name: '', 
         president_id: '', 
@@ -1386,10 +1531,11 @@ function DepartmentManagement() {
       setShowMemberDropdown(false);
       setPositionSearchInputs({ president: '', vice_president: '', secretary: '', treasurer: '', clerk: '' });
       setShowPositionDropdowns({ president: false, vice_president: false, secretary: false, treasurer: false, clerk: false });
+      setEditingId(null);
       fetchDepartments();
     } catch (error) {
-      console.error('부서 등록 오류:', error);
-      alert('등록에 실패했습니다.');
+      console.error(editingId ? '부서 수정 오류:' : '부서 등록 오류:', error);
+      alert(editingId ? '수정에 실패했습니다.' : '등록에 실패했습니다.');
     }
   };
 
@@ -1408,7 +1554,7 @@ function DepartmentManagement() {
   return (
     <div>
       <section className="form-section">
-        <h2>새 부서 등록</h2>
+        <h2>{editingId ? '부서 정보 수정' : '새 부서 등록'}</h2>
         <form onSubmit={handleSubmit} className="member-form">
           <div className="form-group">
             <label>부서명 *</label>
@@ -1670,7 +1816,8 @@ function DepartmentManagement() {
             </div>
           </div>
           <div className="form-actions">
-            <button type="submit" className="btn btn-primary">등록</button>
+            <button type="submit" className="btn btn-primary">{editingId ? '수정' : '등록'}</button>
+            {editingId && <button type="button" onClick={handleCancelEdit} className="btn btn-secondary">취소</button>}
           </div>
         </form>
       </section>
@@ -1715,24 +1862,42 @@ function DepartmentManagement() {
             return <p>{departmentSearchKeyword ? '검색 결과가 없습니다.' : '등록된 부서가 없습니다.'}</p>;
           } else {
             return (
-              <div className="members-list">
-                {filteredDepartments.map(department => (
-              <div key={department.id} className="member-card">
-                <div className="member-info">
-                  <h3>{department.department_name}</h3>
-                  {department.president_name && <p>회장: {department.president_name}</p>}
-                  {department.vice_president_name && <p>부회장: {department.vice_president_name}</p>}
-                  {department.secretary_name && <p>총무: {department.secretary_name}</p>}
-                  {department.treasurer_name && <p>회계: {department.treasurer_name}</p>}
-                  {department.clerk_name && <p>서기: {department.clerk_name}</p>}
-                  {department.members && <p>부서원: {department.members}</p>}
-                  <small>등록일: {new Date(department.created_at).toLocaleDateString()}</small>
-                </div>
-                <div className="member-actions">
-                  <button onClick={() => handleDelete(department.id)} className="btn btn-delete">삭제</button>
-                </div>
-              </div>
-                ))}
+              <div className="members-table-container">
+                <table className="members-table">
+                  <thead>
+                    <tr>
+                      <th>부서명</th>
+                      <th>회장</th>
+                      <th>부회장</th>
+                      <th>총무</th>
+                      <th>회계</th>
+                      <th>서기</th>
+                      <th>부서원</th>
+                      <th>등록일</th>
+                      <th>작업</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredDepartments.map(department => (
+                      <tr key={department.id}>
+                        <td>{department.department_name}</td>
+                        <td>{department.president_name || '-'}</td>
+                        <td>{department.vice_president_name || '-'}</td>
+                        <td>{department.secretary_name || '-'}</td>
+                        <td>{department.treasurer_name || '-'}</td>
+                        <td>{department.clerk_name || '-'}</td>
+                        <td>{department.members || '-'}</td>
+                        <td>{new Date(department.created_at).toLocaleDateString()}</td>
+                        <td>
+                          <div className="member-actions">
+                            <button onClick={() => handleEdit(department)} className="btn btn-edit">수정</button>
+                            <button onClick={() => handleDelete(department.id)} className="btn btn-delete">삭제</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             );
           }
