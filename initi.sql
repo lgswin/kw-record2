@@ -36,10 +36,18 @@ CREATE TABLE IF NOT EXISTS member_families (
 CREATE TABLE IF NOT EXISTS departments (
   id INT AUTO_INCREMENT PRIMARY KEY,
   department_name VARCHAR(100) NOT NULL,
-  leader_id INT COMMENT '부서장의 member id',
+  president_id INT COMMENT '회장의 member id',
+  vice_president_id INT COMMENT '부회장의 member id',
+  secretary_id INT COMMENT '총무의 member id',
+  treasurer_id INT COMMENT '회계의 member id',
+  clerk_id INT COMMENT '서기의 member id',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (leader_id) REFERENCES members(id) ON DELETE SET NULL
+  FOREIGN KEY (president_id) REFERENCES members(id) ON DELETE SET NULL,
+  FOREIGN KEY (vice_president_id) REFERENCES members(id) ON DELETE SET NULL,
+  FOREIGN KEY (secretary_id) REFERENCES members(id) ON DELETE SET NULL,
+  FOREIGN KEY (treasurer_id) REFERENCES members(id) ON DELETE SET NULL,
+  FOREIGN KEY (clerk_id) REFERENCES members(id) ON DELETE SET NULL
 );
 
 -- Member-Department 관계 테이블 (부서원)

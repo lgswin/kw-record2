@@ -60,10 +60,17 @@ function MemberManagement() {
   const [formData, setFormData] = useState({
     name: '', phone: '', address: '', gender: '',
     birth_date: '', baptized: false, baptism_date: '', registration_date: '',
-    office_id: '', family_id: '', party_id: '', department_id: ''
+    office_ids: [], family_ids: [], party_ids: [], department_ids: []
   });
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [searchInputs, setSearchInputs] = useState({
+    office: '', family: '', party: '', department: ''
+  });
+  const [showDropdowns, setShowDropdowns] = useState({
+    office: false, family: false, party: false, department: false
+  });
+  const [searchKeyword, setSearchKeyword] = useState('');
 
   useEffect(() => {
     fetchMembers();
@@ -71,6 +78,20 @@ function MemberManagement() {
     fetchFamilies();
     fetchParties();
     fetchDepartments();
+  }, []);
+
+  // 외부 클릭 시 드롭다운 닫기
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!event.target.closest('.autocomplete-container')) {
+        setShowDropdowns({ office: false, family: false, party: false, department: false });
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, []);
 
   const fetchMembers = async () => {
@@ -90,36 +111,40 @@ function MemberManagement() {
   const fetchOffices = async () => {
     try {
       const response = await axios.get(`${API_URL}/offices`);
-      setOffices(response.data);
+      setOffices(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error('직분 목록 조회 오류:', error);
+      setOffices([]);
     }
   };
 
   const fetchFamilies = async () => {
     try {
       const response = await axios.get(`${API_URL}/families`);
-      setFamilies(response.data);
+      setFamilies(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error('가족 목록 조회 오류:', error);
+      setFamilies([]);
     }
   };
 
   const fetchParties = async () => {
     try {
       const response = await axios.get(`${API_URL}/parties`);
-      setParties(response.data);
+      setParties(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error('순모임 목록 조회 오류:', error);
+      setParties([]);
     }
   };
 
   const fetchDepartments = async () => {
     try {
       const response = await axios.get(`${API_URL}/departments`);
-      setDepartments(response.data);
+      setDepartments(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error('부서 목록 조회 오류:', error);
+      setDepartments([]);
     }
   };
 
@@ -131,6 +156,85 @@ function MemberManagement() {
     }));
   };
 
+
+  const handleSearchInput = (type, value) => {
+    setSearchInputs(prev => ({ ...prev, [type]: value }));
+    setShowDropdowns(prev => ({ ...prev, [type]: value.length > 0 }));
+  };
+
+  const handleSelectItem = (type, item) => {
+    const nameMap = {
+      office: 'office_ids',
+      family: 'family_ids',
+      party: 'party_ids',
+      department: 'department_ids'
+    };
+    const name = nameMap[type];
+    
+    setFormData(prev => {
+      const currentIds = prev[name] || [];
+      if (!currentIds.includes(item.id)) {
+        return {
+          ...prev,
+          [name]: [...currentIds, item.id]
+        };
+      }
+      return prev;
+    });
+    
+    setSearchInputs(prev => ({ ...prev, [type]: '' }));
+    setShowDropdowns(prev => ({ ...prev, [type]: false }));
+  };
+
+  const handleRemoveItem = (type, itemId) => {
+    const nameMap = {
+      office: 'office_ids',
+      family: 'family_ids',
+      party: 'party_ids',
+      department: 'department_ids'
+    };
+    const name = nameMap[type];
+    
+    setFormData(prev => ({
+      ...prev,
+      [name]: (prev[name] || []).filter(id => id !== itemId)
+    }));
+  };
+
+  const getFilteredItems = (type) => {
+    const dataMap = {
+      office: { data: offices, key: 'office_name' },
+      family: { data: families, key: 'family_name' },
+      party: { data: parties, key: 'party_name' },
+      department: { data: departments, key: 'department_name' }
+    };
+    
+    const { data, key } = dataMap[type];
+    const searchTerm = searchInputs[type].toLowerCase();
+    const selectedIds = formData[`${type}_ids`] || [];
+    
+    if (!searchTerm) return [];
+    
+    return (Array.isArray(data) ? data : []).filter(item => {
+      const name = item[key] || '';
+      return name.toLowerCase().includes(searchTerm) && !selectedIds.includes(item.id);
+    });
+  };
+
+  const getSelectedItems = (type) => {
+    const dataMap = {
+      office: { data: offices },
+      family: { data: families },
+      party: { data: parties },
+      department: { data: departments }
+    };
+    
+    const { data } = dataMap[type];
+    const selectedIds = formData[`${type}_ids`] || [];
+    
+    return (Array.isArray(data) ? data : []).filter(item => selectedIds.includes(item.id));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.name.trim() || !formData.phone.trim()) {
@@ -140,8 +244,18 @@ function MemberManagement() {
 
     try {
       const submitData = {
-        ...formData,
-        baptized: formData.baptized === true || formData.baptized === 'true'
+        name: formData.name,
+        phone: formData.phone,
+        address: formData.address || null,
+        gender: formData.gender || null,
+        birth_date: formData.birth_date || null,
+        baptized: formData.baptized === true || formData.baptized === 'true',
+        baptism_date: formData.baptism_date || null,
+        registration_date: formData.registration_date || null,
+        office_ids: formData.office_ids || [],
+        family_ids: formData.family_ids || [],
+        party_ids: formData.party_ids || [],
+        department_ids: formData.department_ids || []
       };
 
       if (editingId) {
@@ -156,7 +270,7 @@ function MemberManagement() {
       setFormData({
         name: '', phone: '', address: '', gender: '',
         birth_date: '', baptized: false, baptism_date: '', registration_date: '',
-        office_id: '', family_id: '', department_id: ''
+        office_ids: [], family_ids: [], party_ids: [], department_ids: []
       });
       fetchMembers();
     } catch (error) {
@@ -175,18 +289,25 @@ function MemberManagement() {
       baptized: member.baptized || false,
       baptism_date: member.baptism_date || '',
       registration_date: member.registration_date || '',
-      office_id: '', family_id: '', party_id: '', department_id: ''
+      office_ids: member.offices ? member.offices.map(o => o.id) : [],
+      family_ids: member.families ? member.families.map(f => f.id) : [],
+      party_ids: member.parties ? member.parties.map(p => p.id) : [],
+      department_ids: member.departments ? member.departments.map(d => d.id) : []
     });
     setEditingId(member.id);
+    setSearchInputs({ office: '', family: '', party: '', department: '' });
+    setShowDropdowns({ office: false, family: false, party: false, department: false });
   };
 
   const handleCancelEdit = () => {
     setFormData({
       name: '', phone: '', address: '', gender: '',
       birth_date: '', baptized: false, baptism_date: '', registration_date: '',
-      office_id: '', family_id: '', party_id: '', department_id: ''
+      office_ids: [], family_ids: [], party_ids: [], department_ids: []
     });
     setEditingId(null);
+    setSearchInputs({ office: '', family: '', party: '', department: '' });
+    setShowDropdowns({ office: false, family: false, party: false, department: false });
   };
 
   const handleDelete = async (id) => {
@@ -206,48 +327,239 @@ function MemberManagement() {
       <section className="form-section">
         <h2>{editingId ? '성도 정보 수정' : '새 성도 등록'}</h2>
         <form onSubmit={handleSubmit} className="member-form">
-          <div className="form-row">
-            <div className="form-group">
-              <label>이름 *</label>
-              <input type="text" name="name" value={formData.name} onChange={handleInputChange} required />
+          {/* 기본 정보 */}
+          <div className="form-subsection">
+            <h3>기본 정보</h3>
+            <div className="form-row form-row-4">
+              <div className="form-group">
+                <label>이름 *</label>
+                <input type="text" name="name" value={formData.name} onChange={handleInputChange} required />
+              </div>
+              <div className="form-group">
+                <label>전화번호 *</label>
+                <input type="tel" name="phone" value={formData.phone} onChange={handleInputChange} required />
+              </div>
+              <div className="form-group">
+                <label>성별</label>
+                <select name="gender" value={formData.gender} onChange={handleInputChange}>
+                  <option value="">선택</option>
+                  <option value="M">남성</option>
+                  <option value="F">여성</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>생년월일</label>
+                <input type="date" name="birth_date" value={formData.birth_date} onChange={handleInputChange} />
+              </div>
             </div>
-            <div className="form-group">
-              <label>전화번호 *</label>
-              <input type="tel" name="phone" value={formData.phone} onChange={handleInputChange} required />
+            <div className="form-row">
+              <div className="form-group form-group-full">
+                <label>주소</label>
+                <input type="text" name="address" value={formData.address} onChange={handleInputChange} />
+              </div>
+            </div>
+            <div className="form-row form-row-3">
+              <div className="form-group">
+                <label>세례 여부</label>
+                <div className="checkbox-container">
+                  <input 
+                    type="checkbox" 
+                    name="baptized" 
+                    id="baptized"
+                    checked={formData.baptized} 
+                    onChange={handleInputChange}
+                    className="checkbox-large"
+                  />
+                  <label htmlFor="baptized" className="checkbox-label-large">
+                    {formData.baptized ? '세례 받음' : '세례 안 받음'}
+                  </label>
+                </div>
+              </div>
+              <div className="form-group">
+                <label>세례일자</label>
+                <input type="date" name="baptism_date" value={formData.baptism_date} onChange={handleInputChange} disabled={!formData.baptized} />
+              </div>
+              <div className="form-group">
+                <label>등록일</label>
+                <input type="date" name="registration_date" value={formData.registration_date} onChange={handleInputChange} />
+              </div>
             </div>
           </div>
-          <div className="form-group">
-            <label>주소</label>
-            <input type="text" name="address" value={formData.address} onChange={handleInputChange} />
+
+          {/* 관계 정보 */}
+          <div className="form-subsection">
+            <h3>관계 정보</h3>
+            <div className="relationship-grid">
+              {/* 직분 */}
+              <div className="relationship-item">
+                <label className="relationship-label">직분</label>
+                <div className="autocomplete-container">
+                  <input
+                    type="text"
+                    placeholder="직분을 입력하세요..."
+                    value={searchInputs.office}
+                    onChange={(e) => handleSearchInput('office', e.target.value)}
+                    onFocus={() => searchInputs.office && setShowDropdowns(prev => ({ ...prev, office: true }))}
+                    className="autocomplete-input"
+                  />
+                  {showDropdowns.office && getFilteredItems('office').length > 0 && (
+                    <div className="autocomplete-dropdown">
+                      {getFilteredItems('office').map(item => (
+                        <div
+                          key={item.id}
+                          className="autocomplete-item"
+                          onClick={() => handleSelectItem('office', item)}
+                        >
+                          {item.office_name}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="selected-tags">
+                    {getSelectedItems('office').map(item => (
+                      <span key={item.id} className="tag">
+                        {item.office_name}
+                        <button
+                          type="button"
+                          className="tag-remove"
+                          onClick={() => handleRemoveItem('office', item.id)}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* 가족 */}
+              <div className="relationship-item">
+                <label className="relationship-label">가족</label>
+                <div className="autocomplete-container">
+                  <input
+                    type="text"
+                    placeholder="가족을 입력하세요..."
+                    value={searchInputs.family}
+                    onChange={(e) => handleSearchInput('family', e.target.value)}
+                    onFocus={() => searchInputs.family && setShowDropdowns(prev => ({ ...prev, family: true }))}
+                    className="autocomplete-input"
+                  />
+                  {showDropdowns.family && getFilteredItems('family').length > 0 && (
+                    <div className="autocomplete-dropdown">
+                      {getFilteredItems('family').map(item => (
+                        <div
+                          key={item.id}
+                          className="autocomplete-item"
+                          onClick={() => handleSelectItem('family', item)}
+                        >
+                          {item.family_name}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="selected-tags">
+                    {getSelectedItems('family').map(item => (
+                      <span key={item.id} className="tag">
+                        {item.family_name}
+                        <button
+                          type="button"
+                          className="tag-remove"
+                          onClick={() => handleRemoveItem('family', item.id)}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* 순모임 */}
+              <div className="relationship-item">
+                <label className="relationship-label">순모임</label>
+                <div className="autocomplete-container">
+                  <input
+                    type="text"
+                    placeholder="순모임을 입력하세요..."
+                    value={searchInputs.party}
+                    onChange={(e) => handleSearchInput('party', e.target.value)}
+                    onFocus={() => searchInputs.party && setShowDropdowns(prev => ({ ...prev, party: true }))}
+                    className="autocomplete-input"
+                  />
+                  {showDropdowns.party && getFilteredItems('party').length > 0 && (
+                    <div className="autocomplete-dropdown">
+                      {getFilteredItems('party').map(item => (
+                        <div
+                          key={item.id}
+                          className="autocomplete-item"
+                          onClick={() => handleSelectItem('party', item)}
+                        >
+                          {item.party_name}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="selected-tags">
+                    {getSelectedItems('party').map(item => (
+                      <span key={item.id} className="tag">
+                        {item.party_name}
+                        <button
+                          type="button"
+                          className="tag-remove"
+                          onClick={() => handleRemoveItem('party', item.id)}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* 부서 */}
+              <div className="relationship-item">
+                <label className="relationship-label">부서</label>
+                <div className="autocomplete-container">
+                  <input
+                    type="text"
+                    placeholder="부서를 입력하세요..."
+                    value={searchInputs.department}
+                    onChange={(e) => handleSearchInput('department', e.target.value)}
+                    onFocus={() => searchInputs.department && setShowDropdowns(prev => ({ ...prev, department: true }))}
+                    className="autocomplete-input"
+                  />
+                  {showDropdowns.department && getFilteredItems('department').length > 0 && (
+                    <div className="autocomplete-dropdown">
+                      {getFilteredItems('department').map(item => (
+                        <div
+                          key={item.id}
+                          className="autocomplete-item"
+                          onClick={() => handleSelectItem('department', item)}
+                        >
+                          {item.department_name}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="selected-tags">
+                    {getSelectedItems('department').map(item => (
+                      <span key={item.id} className="tag">
+                        {item.department_name}
+                        <button
+                          type="button"
+                          className="tag-remove"
+                          onClick={() => handleRemoveItem('department', item.id)}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="form-row">
-            <div className="form-group">
-              <label>성별</label>
-              <select name="gender" value={formData.gender} onChange={handleInputChange}>
-                <option value="">선택</option>
-                <option value="M">남성</option>
-                <option value="F">여성</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label>생년월일</label>
-              <input type="date" name="birth_date" value={formData.birth_date} onChange={handleInputChange} />
-            </div>
-          </div>
-          <div className="form-row">
-            <div className="form-group">
-              <label>세례 여부</label>
-              <input type="checkbox" name="baptized" checked={formData.baptized} onChange={handleInputChange} />
-            </div>
-            <div className="form-group">
-              <label>세례일자</label>
-              <input type="date" name="baptism_date" value={formData.baptism_date} onChange={handleInputChange} />
-            </div>
-            <div className="form-group">
-              <label>등록일</label>
-              <input type="date" name="registration_date" value={formData.registration_date} onChange={handleInputChange} />
-            </div>
-          </div>
+
           <div className="form-actions">
             <button type="submit" className="btn btn-primary">{editingId ? '수정' : '등록'}</button>
             {editingId && <button type="button" onClick={handleCancelEdit} className="btn btn-secondary">취소</button>}
@@ -256,10 +568,47 @@ function MemberManagement() {
       </section>
 
       <section className="list-section">
-        <h2>성도 목록</h2>
-        {loading ? <p>로딩 중...</p> : members.length === 0 ? <p>등록된 성도가 없습니다.</p> : (
-          <div className="members-list">
-            {members.map(member => (
+        <div className="list-header">
+          <h2>성도 목록</h2>
+          <div className="search-container">
+            <input
+              type="text"
+              placeholder="이름, 전화번호, 주소로 검색..."
+              value={searchKeyword}
+              onChange={(e) => setSearchKeyword(e.target.value)}
+              className="search-input"
+            />
+          </div>
+        </div>
+        {(() => {
+          const filteredMembers = members.filter(member => {
+            if (!searchKeyword.trim()) return true;
+            const keyword = searchKeyword.toLowerCase();
+            const name = (member.name || '').toLowerCase();
+            const phone = (member.phone || '').toLowerCase();
+            const address = (member.address || '').toLowerCase();
+            const offices = member.offices ? member.offices.map(o => o.office_name).join(' ').toLowerCase() : '';
+            const families = member.families ? member.families.map(f => f.family_name).join(' ').toLowerCase() : '';
+            const parties = member.parties ? member.parties.map(p => p.party_name).join(' ').toLowerCase() : '';
+            const departments = member.departments ? member.departments.map(d => d.department_name).join(' ').toLowerCase() : '';
+            
+            return name.includes(keyword) || 
+                   phone.includes(keyword) || 
+                   address.includes(keyword) ||
+                   offices.includes(keyword) ||
+                   families.includes(keyword) ||
+                   parties.includes(keyword) ||
+                   departments.includes(keyword);
+          });
+
+          if (loading) {
+            return <p>로딩 중...</p>;
+          } else if (filteredMembers.length === 0) {
+            return <p>{searchKeyword ? '검색 결과가 없습니다.' : '등록된 성도가 없습니다.'}</p>;
+          } else {
+            return (
+              <div className="members-list">
+                {filteredMembers.map(member => (
               <div key={member.id} className="member-card">
                 <div className="member-info">
                   <h3>{member.name}</h3>
@@ -267,6 +616,18 @@ function MemberManagement() {
                   {member.address && <p>주소: {member.address}</p>}
                   {member.gender && <p>성별: {member.gender === 'M' ? '남성' : '여성'}</p>}
                   {member.birth_date && <p>생년월일: {member.birth_date}</p>}
+                  {member.offices && member.offices.length > 0 && (
+                    <p><strong>직분:</strong> {member.offices.map(o => o.office_name).join(', ')}</p>
+                  )}
+                  {member.families && member.families.length > 0 && (
+                    <p><strong>가족:</strong> {member.families.map(f => f.family_name).join(', ')}</p>
+                  )}
+                  {member.parties && member.parties.length > 0 && (
+                    <p><strong>순모임:</strong> {member.parties.map(p => p.party_name).join(', ')}</p>
+                  )}
+                  {member.departments && member.departments.length > 0 && (
+                    <p><strong>부서:</strong> {member.departments.map(d => d.department_name).join(', ')}</p>
+                  )}
                   <small>등록일: {new Date(member.created_at).toLocaleDateString()}</small>
                 </div>
                 <div className="member-actions">
@@ -274,7 +635,25 @@ function MemberManagement() {
                   <button onClick={() => handleDelete(member.id)} className="btn btn-delete">삭제</button>
                 </div>
               </div>
-            ))}
+                ))}
+              </div>
+            );
+          }
+        })()}
+        {searchKeyword && (
+          <div className="search-result-info">
+            검색 결과: {members.filter(m => {
+              const keyword = searchKeyword.toLowerCase();
+              const name = (m.name || '').toLowerCase();
+              const phone = (m.phone || '').toLowerCase();
+              const address = (m.address || '').toLowerCase();
+              const offices = m.offices ? m.offices.map(o => o.office_name).join(' ').toLowerCase() : '';
+              const families = m.families ? m.families.map(f => f.family_name).join(' ').toLowerCase() : '';
+              const parties = m.parties ? m.parties.map(p => p.party_name).join(' ').toLowerCase() : '';
+              const departments = m.departments ? m.departments.map(d => d.department_name).join(' ').toLowerCase() : '';
+              return name.includes(keyword) || phone.includes(keyword) || address.includes(keyword) ||
+                     offices.includes(keyword) || families.includes(keyword) || parties.includes(keyword) || departments.includes(keyword);
+            }).length}명 / 전체 {members.length}명
           </div>
         )}
       </section>
@@ -288,10 +667,27 @@ function FamilyManagement() {
   const [members, setMembers] = useState([]);
   const [formData, setFormData] = useState({ family_name: '', member_ids: [] });
   const [loading, setLoading] = useState(false);
+  const [memberSearchInput, setMemberSearchInput] = useState('');
+  const [showMemberDropdown, setShowMemberDropdown] = useState(false);
+  const [familySearchKeyword, setFamilySearchKeyword] = useState('');
 
   useEffect(() => {
     fetchFamilies();
     fetchMembers();
+  }, []);
+
+  // 외부 클릭 시 드롭다운 닫기
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!event.target.closest('.autocomplete-container')) {
+        setShowMemberDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, []);
 
   const fetchFamilies = async () => {
@@ -323,13 +719,47 @@ function FamilyManagement() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleMemberToggle = (memberId) => {
+  const handleMemberSearchInput = (value) => {
+    setMemberSearchInput(value);
+    setShowMemberDropdown(value.length > 0);
+  };
+
+  const handleSelectMember = (member) => {
+    setFormData(prev => {
+      if (!prev.member_ids.includes(member.id)) {
+        return {
+          ...prev,
+          member_ids: [...prev.member_ids, member.id]
+        };
+      }
+      return prev;
+    });
+    setMemberSearchInput('');
+    setShowMemberDropdown(false);
+  };
+
+  const handleRemoveMember = (memberId) => {
     setFormData(prev => ({
       ...prev,
-      member_ids: prev.member_ids.includes(memberId)
-        ? prev.member_ids.filter(id => id !== memberId)
-        : [...prev.member_ids, memberId]
+      member_ids: prev.member_ids.filter(id => id !== memberId)
     }));
+  };
+
+  const getFilteredMembers = () => {
+    if (!memberSearchInput.trim()) return [];
+    const keyword = memberSearchInput.toLowerCase();
+    const selectedIds = formData.member_ids || [];
+    
+    return (Array.isArray(members) ? members : []).filter(member => {
+      const name = (member.name || '').toLowerCase();
+      const phone = (member.phone || '').toLowerCase();
+      return (name.includes(keyword) || phone.includes(keyword)) && !selectedIds.includes(member.id);
+    });
+  };
+
+  const getSelectedMembers = () => {
+    const selectedIds = formData.member_ids || [];
+    return (Array.isArray(members) ? members : []).filter(member => selectedIds.includes(member.id));
   };
 
   const handleSubmit = async (e) => {
@@ -343,6 +773,8 @@ function FamilyManagement() {
       await axios.post(`${API_URL}/families`, formData);
       alert('가족이 등록되었습니다.');
       setFormData({ family_name: '', member_ids: [] });
+      setMemberSearchInput('');
+      setShowMemberDropdown(false);
       fetchFamilies();
     } catch (error) {
       console.error('가족 등록 오류:', error);
@@ -373,17 +805,42 @@ function FamilyManagement() {
           </div>
           <div className="form-group">
             <label>가족 구성원 선택</label>
-            <div className="checkbox-list">
-              {members.map(member => (
-                <label key={member.id} className="checkbox-item">
-                  <input
-                    type="checkbox"
-                    checked={formData.member_ids.includes(member.id)}
-                    onChange={() => handleMemberToggle(member.id)}
-                  />
-                  {member.name} ({member.phone})
-                </label>
-              ))}
+            <div className="autocomplete-container">
+              <input
+                type="text"
+                placeholder="성도 이름 또는 전화번호로 검색..."
+                value={memberSearchInput}
+                onChange={(e) => handleMemberSearchInput(e.target.value)}
+                onFocus={() => memberSearchInput && setShowMemberDropdown(true)}
+                className="autocomplete-input"
+              />
+              {showMemberDropdown && getFilteredMembers().length > 0 && (
+                <div className="autocomplete-dropdown">
+                  {getFilteredMembers().map(member => (
+                    <div
+                      key={member.id}
+                      className="autocomplete-item"
+                      onClick={() => handleSelectMember(member)}
+                    >
+                      {member.name} ({member.phone})
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="selected-tags">
+                {getSelectedMembers().map(member => (
+                  <span key={member.id} className="tag">
+                    {member.name} ({member.phone})
+                    <button
+                      type="button"
+                      className="tag-remove"
+                      onClick={() => handleRemoveMember(member.id)}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
           <div className="form-actions">
@@ -393,10 +850,36 @@ function FamilyManagement() {
       </section>
 
       <section className="list-section">
-        <h2>가족 목록</h2>
-        {loading ? <p>로딩 중...</p> : families.length === 0 ? <p>등록된 가족이 없습니다.</p> : (
-          <div className="members-list">
-            {families.map(family => (
+        <div className="list-header">
+          <h2>가족 목록</h2>
+          <div className="search-container">
+            <input
+              type="text"
+              placeholder="가족명 또는 구성원 이름으로 검색..."
+              value={familySearchKeyword}
+              onChange={(e) => setFamilySearchKeyword(e.target.value)}
+              className="search-input"
+            />
+          </div>
+        </div>
+        {(() => {
+          const filteredFamilies = families.filter(family => {
+            if (!familySearchKeyword.trim()) return true;
+            const keyword = familySearchKeyword.toLowerCase();
+            const familyName = (family.family_name || '').toLowerCase();
+            const members = (family.members || '').toLowerCase();
+            
+            return familyName.includes(keyword) || members.includes(keyword);
+          });
+
+          if (loading) {
+            return <p>로딩 중...</p>;
+          } else if (filteredFamilies.length === 0) {
+            return <p>{familySearchKeyword ? '검색 결과가 없습니다.' : '등록된 가족이 없습니다.'}</p>;
+          } else {
+            return (
+              <div className="members-list">
+                {filteredFamilies.map(family => (
               <div key={family.id} className="member-card">
                 <div className="member-info">
                   <h3>{family.family_name}</h3>
@@ -407,7 +890,19 @@ function FamilyManagement() {
                   <button onClick={() => handleDelete(family.id)} className="btn btn-delete">삭제</button>
                 </div>
               </div>
-            ))}
+                ))}
+              </div>
+            );
+          }
+        })()}
+        {familySearchKeyword && (
+          <div className="search-result-info">
+            검색 결과: {families.filter(f => {
+              const keyword = familySearchKeyword.toLowerCase();
+              const familyName = (f.family_name || '').toLowerCase();
+              const members = (f.members || '').toLowerCase();
+              return familyName.includes(keyword) || members.includes(keyword);
+            }).length}개 / 전체 {families.length}개
           </div>
         )}
       </section>
@@ -421,10 +916,27 @@ function PartyManagement() {
   const [members, setMembers] = useState([]);
   const [formData, setFormData] = useState({ party_name: '', leader_id: '', member_ids: [] });
   const [loading, setLoading] = useState(false);
+  const [memberSearchInput, setMemberSearchInput] = useState('');
+  const [showMemberDropdown, setShowMemberDropdown] = useState(false);
+  const [partySearchKeyword, setPartySearchKeyword] = useState('');
 
   useEffect(() => {
     fetchParties();
     fetchMembers();
+  }, []);
+
+  // 외부 클릭 시 드롭다운 닫기
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!event.target.closest('.autocomplete-container')) {
+        setShowMemberDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, []);
 
   const fetchParties = async () => {
@@ -456,13 +968,47 @@ function PartyManagement() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleMemberToggle = (memberId) => {
+  const handleMemberSearchInput = (value) => {
+    setMemberSearchInput(value);
+    setShowMemberDropdown(value.length > 0);
+  };
+
+  const handleSelectMember = (member) => {
+    setFormData(prev => {
+      if (!prev.member_ids.includes(member.id)) {
+        return {
+          ...prev,
+          member_ids: [...prev.member_ids, member.id]
+        };
+      }
+      return prev;
+    });
+    setMemberSearchInput('');
+    setShowMemberDropdown(false);
+  };
+
+  const handleRemoveMember = (memberId) => {
     setFormData(prev => ({
       ...prev,
-      member_ids: prev.member_ids.includes(memberId)
-        ? prev.member_ids.filter(id => id !== memberId)
-        : [...prev.member_ids, memberId]
+      member_ids: prev.member_ids.filter(id => id !== memberId)
     }));
+  };
+
+  const getFilteredMembers = () => {
+    if (!memberSearchInput.trim()) return [];
+    const keyword = memberSearchInput.toLowerCase();
+    const selectedIds = formData.member_ids || [];
+    
+    return (Array.isArray(members) ? members : []).filter(member => {
+      const name = (member.name || '').toLowerCase();
+      const phone = (member.phone || '').toLowerCase();
+      return (name.includes(keyword) || phone.includes(keyword)) && !selectedIds.includes(member.id);
+    });
+  };
+
+  const getSelectedMembers = () => {
+    const selectedIds = formData.member_ids || [];
+    return (Array.isArray(members) ? members : []).filter(member => selectedIds.includes(member.id));
   };
 
   const handleSubmit = async (e) => {
@@ -476,6 +1022,8 @@ function PartyManagement() {
       await axios.post(`${API_URL}/parties`, formData);
       alert('순모임이 등록되었습니다.');
       setFormData({ party_name: '', leader_id: '', member_ids: [] });
+      setMemberSearchInput('');
+      setShowMemberDropdown(false);
       fetchParties();
     } catch (error) {
       console.error('순모임 등록 오류:', error);
@@ -515,17 +1063,42 @@ function PartyManagement() {
           </div>
           <div className="form-group">
             <label>순원 선택</label>
-            <div className="checkbox-list">
-              {members.map(member => (
-                <label key={member.id} className="checkbox-item">
-                  <input
-                    type="checkbox"
-                    checked={formData.member_ids.includes(member.id)}
-                    onChange={() => handleMemberToggle(member.id)}
-                  />
-                  {member.name} ({member.phone})
-                </label>
-              ))}
+            <div className="autocomplete-container">
+              <input
+                type="text"
+                placeholder="성도 이름 또는 전화번호로 검색..."
+                value={memberSearchInput}
+                onChange={(e) => handleMemberSearchInput(e.target.value)}
+                onFocus={() => memberSearchInput && setShowMemberDropdown(true)}
+                className="autocomplete-input"
+              />
+              {showMemberDropdown && getFilteredMembers().length > 0 && (
+                <div className="autocomplete-dropdown">
+                  {getFilteredMembers().map(member => (
+                    <div
+                      key={member.id}
+                      className="autocomplete-item"
+                      onClick={() => handleSelectMember(member)}
+                    >
+                      {member.name} ({member.phone})
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="selected-tags">
+                {getSelectedMembers().map(member => (
+                  <span key={member.id} className="tag">
+                    {member.name} ({member.phone})
+                    <button
+                      type="button"
+                      className="tag-remove"
+                      onClick={() => handleRemoveMember(member.id)}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
           <div className="form-actions">
@@ -535,10 +1108,37 @@ function PartyManagement() {
       </section>
 
       <section className="list-section">
-        <h2>순모임 목록</h2>
-        {loading ? <p>로딩 중...</p> : parties.length === 0 ? <p>등록된 순모임이 없습니다.</p> : (
-          <div className="members-list">
-            {parties.map(party => (
+        <div className="list-header">
+          <h2>순모임 목록</h2>
+          <div className="search-container">
+            <input
+              type="text"
+              placeholder="순명 또는 순원 이름으로 검색..."
+              value={partySearchKeyword}
+              onChange={(e) => setPartySearchKeyword(e.target.value)}
+              className="search-input"
+            />
+          </div>
+        </div>
+        {(() => {
+          const filteredParties = parties.filter(party => {
+            if (!partySearchKeyword.trim()) return true;
+            const keyword = partySearchKeyword.toLowerCase();
+            const partyName = (party.party_name || '').toLowerCase();
+            const leaderName = (party.leader_name || '').toLowerCase();
+            const members = (party.members || '').toLowerCase();
+            
+            return partyName.includes(keyword) || leaderName.includes(keyword) || members.includes(keyword);
+          });
+
+          if (loading) {
+            return <p>로딩 중...</p>;
+          } else if (filteredParties.length === 0) {
+            return <p>{partySearchKeyword ? '검색 결과가 없습니다.' : '등록된 순모임이 없습니다.'}</p>;
+          } else {
+            return (
+              <div className="members-list">
+                {filteredParties.map(party => (
               <div key={party.id} className="member-card">
                 <div className="member-info">
                   <h3>{party.party_name}</h3>
@@ -550,7 +1150,20 @@ function PartyManagement() {
                   <button onClick={() => handleDelete(party.id)} className="btn btn-delete">삭제</button>
                 </div>
               </div>
-            ))}
+                ))}
+              </div>
+            );
+          }
+        })()}
+        {partySearchKeyword && (
+          <div className="search-result-info">
+            검색 결과: {parties.filter(p => {
+              const keyword = partySearchKeyword.toLowerCase();
+              const partyName = (p.party_name || '').toLowerCase();
+              const leaderName = (p.leader_name || '').toLowerCase();
+              const members = (p.members || '').toLowerCase();
+              return partyName.includes(keyword) || leaderName.includes(keyword) || members.includes(keyword);
+            }).length}개 / 전체 {parties.length}개
           </div>
         )}
       </section>
@@ -562,12 +1175,43 @@ function PartyManagement() {
 function DepartmentManagement() {
   const [departments, setDepartments] = useState([]);
   const [members, setMembers] = useState([]);
-  const [formData, setFormData] = useState({ department_name: '', leader_id: '', member_ids: [] });
+  const [formData, setFormData] = useState({ 
+    department_name: '', 
+    president_id: '', 
+    vice_president_id: '', 
+    secretary_id: '', 
+    treasurer_id: '', 
+    clerk_id: '', 
+    member_ids: [] 
+  });
   const [loading, setLoading] = useState(false);
+  const [memberSearchInput, setMemberSearchInput] = useState('');
+  const [showMemberDropdown, setShowMemberDropdown] = useState(false);
+  const [departmentSearchKeyword, setDepartmentSearchKeyword] = useState('');
+  const [positionSearchInputs, setPositionSearchInputs] = useState({
+    president: '', vice_president: '', secretary: '', treasurer: '', clerk: ''
+  });
+  const [showPositionDropdowns, setShowPositionDropdowns] = useState({
+    president: false, vice_president: false, secretary: false, treasurer: false, clerk: false
+  });
 
   useEffect(() => {
     fetchDepartments();
     fetchMembers();
+  }, []);
+
+  // 외부 클릭 시 드롭다운 닫기
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!event.target.closest('.autocomplete-container')) {
+        setShowMemberDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, []);
 
   const fetchDepartments = async () => {
@@ -599,13 +1243,124 @@ function DepartmentManagement() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleMemberToggle = (memberId) => {
+  const handleMemberSearchInput = (value) => {
+    setMemberSearchInput(value);
+    setShowMemberDropdown(value.length > 0);
+  };
+
+  const handleSelectMember = (member) => {
+    setFormData(prev => {
+      if (!prev.member_ids.includes(member.id)) {
+        return {
+          ...prev,
+          member_ids: [...prev.member_ids, member.id]
+        };
+      }
+      return prev;
+    });
+    setMemberSearchInput('');
+    setShowMemberDropdown(false);
+  };
+
+  const handleRemoveMember = (memberId) => {
     setFormData(prev => ({
       ...prev,
-      member_ids: prev.member_ids.includes(memberId)
-        ? prev.member_ids.filter(id => id !== memberId)
-        : [...prev.member_ids, memberId]
+      member_ids: prev.member_ids.filter(id => id !== memberId)
     }));
+  };
+
+  const getFilteredMembers = () => {
+    if (!memberSearchInput.trim()) return [];
+    const keyword = memberSearchInput.toLowerCase();
+    const selectedIds = formData.member_ids || [];
+    
+    return (Array.isArray(members) ? members : []).filter(member => {
+      const name = (member.name || '').toLowerCase();
+      const phone = (member.phone || '').toLowerCase();
+      return (name.includes(keyword) || phone.includes(keyword)) && !selectedIds.includes(member.id);
+    });
+  };
+
+  const getSelectedMembers = () => {
+    const selectedIds = formData.member_ids || [];
+    return (Array.isArray(members) ? members : []).filter(member => selectedIds.includes(member.id));
+  };
+
+  const handlePositionSearchInput = (position, value) => {
+    setPositionSearchInputs(prev => ({ ...prev, [position]: value }));
+    setShowPositionDropdowns(prev => ({ ...prev, [position]: value.length > 0 }));
+  };
+
+  const handleSelectPosition = (position, member) => {
+    const positionMap = {
+      president: 'president_id',
+      vice_president: 'vice_president_id',
+      secretary: 'secretary_id',
+      treasurer: 'treasurer_id',
+      clerk: 'clerk_id'
+    };
+    const fieldName = positionMap[position];
+    
+    setFormData(prev => ({
+      ...prev,
+      [fieldName]: member.id
+    }));
+    
+    setPositionSearchInputs(prev => ({ ...prev, [position]: '' }));
+    setShowPositionDropdowns(prev => ({ ...prev, [position]: false }));
+  };
+
+  const handleRemovePosition = (position) => {
+    const positionMap = {
+      president: 'president_id',
+      vice_president: 'vice_president_id',
+      secretary: 'secretary_id',
+      treasurer: 'treasurer_id',
+      clerk: 'clerk_id'
+    };
+    const fieldName = positionMap[position];
+    
+    setFormData(prev => ({
+      ...prev,
+      [fieldName]: ''
+    }));
+  };
+
+  const getFilteredMembersForPosition = (position) => {
+    const positionMap = {
+      president: 'president_id',
+      vice_president: 'vice_president_id',
+      secretary: 'secretary_id',
+      treasurer: 'treasurer_id',
+      clerk: 'clerk_id'
+    };
+    const fieldName = positionMap[position];
+    const selectedId = formData[fieldName] || '';
+    
+    if (!positionSearchInputs[position].trim()) return [];
+    const keyword = positionSearchInputs[position].toLowerCase();
+    
+    return (Array.isArray(members) ? members : []).filter(member => {
+      if (member.id === selectedId) return false; // 이미 선택된 사람 제외
+      const name = (member.name || '').toLowerCase();
+      const phone = (member.phone || '').toLowerCase();
+      return (name.includes(keyword) || phone.includes(keyword));
+    });
+  };
+
+  const getSelectedPositionMember = (position) => {
+    const positionMap = {
+      president: 'president_id',
+      vice_president: 'vice_president_id',
+      secretary: 'secretary_id',
+      treasurer: 'treasurer_id',
+      clerk: 'clerk_id'
+    };
+    const fieldName = positionMap[position];
+    const selectedId = formData[fieldName];
+    
+    if (!selectedId) return null;
+    return (Array.isArray(members) ? members : []).find(member => member.id === selectedId);
   };
 
   const handleSubmit = async (e) => {
@@ -618,7 +1373,19 @@ function DepartmentManagement() {
     try {
       await axios.post(`${API_URL}/departments`, formData);
       alert('부서가 등록되었습니다.');
-      setFormData({ department_name: '', leader_id: '', member_ids: [] });
+      setFormData({ 
+        department_name: '', 
+        president_id: '', 
+        vice_president_id: '', 
+        secretary_id: '', 
+        treasurer_id: '', 
+        clerk_id: '', 
+        member_ids: [] 
+      });
+      setMemberSearchInput('');
+      setShowMemberDropdown(false);
+      setPositionSearchInputs({ president: '', vice_president: '', secretary: '', treasurer: '', clerk: '' });
+      setShowPositionDropdowns({ president: false, vice_president: false, secretary: false, treasurer: false, clerk: false });
       fetchDepartments();
     } catch (error) {
       console.error('부서 등록 오류:', error);
@@ -647,28 +1414,259 @@ function DepartmentManagement() {
             <label>부서명 *</label>
             <input type="text" name="department_name" value={formData.department_name} onChange={handleInputChange} required />
           </div>
-          <div className="form-group">
-            <label>부서장 선택</label>
-            <select name="leader_id" value={formData.leader_id} onChange={handleInputChange}>
-              <option value="">선택 안 함</option>
-              {members.map(member => (
-                <option key={member.id} value={member.id}>{member.name}</option>
-              ))}
-            </select>
+          {/* 직책별 선택 */}
+          <div className="form-subsection">
+            <h3>직책별 선택</h3>
+            <div className="position-selection-grid">
+              {/* 회장 */}
+              <div className="form-group">
+                <label>회장</label>
+                <div className="autocomplete-container">
+                  <input
+                    type="text"
+                    placeholder="검색..."
+                    value={positionSearchInputs.president}
+                    onChange={(e) => handlePositionSearchInput('president', e.target.value)}
+                    onFocus={() => positionSearchInputs.president && setShowPositionDropdowns(prev => ({ ...prev, president: true }))}
+                    className="autocomplete-input"
+                  />
+                  {showPositionDropdowns.president && getFilteredMembersForPosition('president').length > 0 && (
+                    <div className="autocomplete-dropdown">
+                      {getFilteredMembersForPosition('president').map(member => (
+                        <div
+                          key={member.id}
+                          className="autocomplete-item"
+                          onClick={() => handleSelectPosition('president', member)}
+                        >
+                          {member.name} ({member.phone})
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {getSelectedPositionMember('president') && (
+                    <div className="selected-position-member">
+                      <span className="tag">
+                        {getSelectedPositionMember('president').name}
+                        <button
+                          type="button"
+                          className="tag-remove"
+                          onClick={() => handleRemovePosition('president')}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 부회장 */}
+              <div className="form-group">
+                <label>부회장</label>
+                <div className="autocomplete-container">
+                  <input
+                    type="text"
+                    placeholder="검색..."
+                    value={positionSearchInputs.vice_president}
+                    onChange={(e) => handlePositionSearchInput('vice_president', e.target.value)}
+                    onFocus={() => positionSearchInputs.vice_president && setShowPositionDropdowns(prev => ({ ...prev, vice_president: true }))}
+                    className="autocomplete-input"
+                  />
+                  {showPositionDropdowns.vice_president && getFilteredMembersForPosition('vice_president').length > 0 && (
+                    <div className="autocomplete-dropdown">
+                      {getFilteredMembersForPosition('vice_president').map(member => (
+                        <div
+                          key={member.id}
+                          className="autocomplete-item"
+                          onClick={() => handleSelectPosition('vice_president', member)}
+                        >
+                          {member.name} ({member.phone})
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {getSelectedPositionMember('vice_president') && (
+                    <div className="selected-position-member">
+                      <span className="tag">
+                        {getSelectedPositionMember('vice_president').name}
+                        <button
+                          type="button"
+                          className="tag-remove"
+                          onClick={() => handleRemovePosition('vice_president')}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 총무 */}
+              <div className="form-group">
+                <label>총무</label>
+                <div className="autocomplete-container">
+                  <input
+                    type="text"
+                    placeholder="검색..."
+                    value={positionSearchInputs.secretary}
+                    onChange={(e) => handlePositionSearchInput('secretary', e.target.value)}
+                    onFocus={() => positionSearchInputs.secretary && setShowPositionDropdowns(prev => ({ ...prev, secretary: true }))}
+                    className="autocomplete-input"
+                  />
+                  {showPositionDropdowns.secretary && getFilteredMembersForPosition('secretary').length > 0 && (
+                    <div className="autocomplete-dropdown">
+                      {getFilteredMembersForPosition('secretary').map(member => (
+                        <div
+                          key={member.id}
+                          className="autocomplete-item"
+                          onClick={() => handleSelectPosition('secretary', member)}
+                        >
+                          {member.name} ({member.phone})
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {getSelectedPositionMember('secretary') && (
+                    <div className="selected-position-member">
+                      <span className="tag">
+                        {getSelectedPositionMember('secretary').name}
+                        <button
+                          type="button"
+                          className="tag-remove"
+                          onClick={() => handleRemovePosition('secretary')}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 회계 */}
+              <div className="form-group">
+                <label>회계</label>
+                <div className="autocomplete-container">
+                  <input
+                    type="text"
+                    placeholder="검색..."
+                    value={positionSearchInputs.treasurer}
+                    onChange={(e) => handlePositionSearchInput('treasurer', e.target.value)}
+                    onFocus={() => positionSearchInputs.treasurer && setShowPositionDropdowns(prev => ({ ...prev, treasurer: true }))}
+                    className="autocomplete-input"
+                  />
+                  {showPositionDropdowns.treasurer && getFilteredMembersForPosition('treasurer').length > 0 && (
+                    <div className="autocomplete-dropdown">
+                      {getFilteredMembersForPosition('treasurer').map(member => (
+                        <div
+                          key={member.id}
+                          className="autocomplete-item"
+                          onClick={() => handleSelectPosition('treasurer', member)}
+                        >
+                          {member.name} ({member.phone})
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {getSelectedPositionMember('treasurer') && (
+                    <div className="selected-position-member">
+                      <span className="tag">
+                        {getSelectedPositionMember('treasurer').name}
+                        <button
+                          type="button"
+                          className="tag-remove"
+                          onClick={() => handleRemovePosition('treasurer')}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 서기 */}
+              <div className="form-group">
+                <label>서기</label>
+                <div className="autocomplete-container">
+                  <input
+                    type="text"
+                    placeholder="검색..."
+                    value={positionSearchInputs.clerk}
+                    onChange={(e) => handlePositionSearchInput('clerk', e.target.value)}
+                    onFocus={() => positionSearchInputs.clerk && setShowPositionDropdowns(prev => ({ ...prev, clerk: true }))}
+                    className="autocomplete-input"
+                  />
+                  {showPositionDropdowns.clerk && getFilteredMembersForPosition('clerk').length > 0 && (
+                    <div className="autocomplete-dropdown">
+                      {getFilteredMembersForPosition('clerk').map(member => (
+                        <div
+                          key={member.id}
+                          className="autocomplete-item"
+                          onClick={() => handleSelectPosition('clerk', member)}
+                        >
+                          {member.name} ({member.phone})
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {getSelectedPositionMember('clerk') && (
+                    <div className="selected-position-member">
+                      <span className="tag">
+                        {getSelectedPositionMember('clerk').name}
+                        <button
+                          type="button"
+                          className="tag-remove"
+                          onClick={() => handleRemovePosition('clerk')}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
           <div className="form-group">
             <label>부서원 선택</label>
-            <div className="checkbox-list">
-              {members.map(member => (
-                <label key={member.id} className="checkbox-item">
-                  <input
-                    type="checkbox"
-                    checked={formData.member_ids.includes(member.id)}
-                    onChange={() => handleMemberToggle(member.id)}
-                  />
-                  {member.name} ({member.phone})
-                </label>
-              ))}
+            <div className="autocomplete-container">
+              <input
+                type="text"
+                placeholder="성도 이름 또는 전화번호로 검색..."
+                value={memberSearchInput}
+                onChange={(e) => handleMemberSearchInput(e.target.value)}
+                onFocus={() => memberSearchInput && setShowMemberDropdown(true)}
+                className="autocomplete-input"
+              />
+              {showMemberDropdown && getFilteredMembers().length > 0 && (
+                <div className="autocomplete-dropdown">
+                  {getFilteredMembers().map(member => (
+                    <div
+                      key={member.id}
+                      className="autocomplete-item"
+                      onClick={() => handleSelectMember(member)}
+                    >
+                      {member.name} ({member.phone})
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="selected-tags">
+                {getSelectedMembers().map(member => (
+                  <span key={member.id} className="tag">
+                    {member.name} ({member.phone})
+                    <button
+                      type="button"
+                      className="tag-remove"
+                      onClick={() => handleRemoveMember(member.id)}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
           <div className="form-actions">
@@ -678,14 +1676,55 @@ function DepartmentManagement() {
       </section>
 
       <section className="list-section">
-        <h2>부서 목록</h2>
-        {loading ? <p>로딩 중...</p> : departments.length === 0 ? <p>등록된 부서가 없습니다.</p> : (
-          <div className="members-list">
-            {departments.map(department => (
+        <div className="list-header">
+          <h2>부서 목록</h2>
+          <div className="search-container">
+            <input
+              type="text"
+              placeholder="부서명 또는 부서원 이름으로 검색..."
+              value={departmentSearchKeyword}
+              onChange={(e) => setDepartmentSearchKeyword(e.target.value)}
+              className="search-input"
+            />
+          </div>
+        </div>
+        {(() => {
+          const filteredDepartments = departments.filter(department => {
+            if (!departmentSearchKeyword.trim()) return true;
+            const keyword = departmentSearchKeyword.toLowerCase();
+            const departmentName = (department.department_name || '').toLowerCase();
+            const presidentName = (department.president_name || '').toLowerCase();
+            const vicePresidentName = (department.vice_president_name || '').toLowerCase();
+            const secretaryName = (department.secretary_name || '').toLowerCase();
+            const treasurerName = (department.treasurer_name || '').toLowerCase();
+            const clerkName = (department.clerk_name || '').toLowerCase();
+            const members = (department.members || '').toLowerCase();
+            
+            return departmentName.includes(keyword) || 
+                   presidentName.includes(keyword) ||
+                   vicePresidentName.includes(keyword) ||
+                   secretaryName.includes(keyword) ||
+                   treasurerName.includes(keyword) ||
+                   clerkName.includes(keyword) ||
+                   members.includes(keyword);
+          });
+
+          if (loading) {
+            return <p>로딩 중...</p>;
+          } else if (filteredDepartments.length === 0) {
+            return <p>{departmentSearchKeyword ? '검색 결과가 없습니다.' : '등록된 부서가 없습니다.'}</p>;
+          } else {
+            return (
+              <div className="members-list">
+                {filteredDepartments.map(department => (
               <div key={department.id} className="member-card">
                 <div className="member-info">
                   <h3>{department.department_name}</h3>
-                  {department.leader_name && <p>부서장: {department.leader_name}</p>}
+                  {department.president_name && <p>회장: {department.president_name}</p>}
+                  {department.vice_president_name && <p>부회장: {department.vice_president_name}</p>}
+                  {department.secretary_name && <p>총무: {department.secretary_name}</p>}
+                  {department.treasurer_name && <p>회계: {department.treasurer_name}</p>}
+                  {department.clerk_name && <p>서기: {department.clerk_name}</p>}
                   {department.members && <p>부서원: {department.members}</p>}
                   <small>등록일: {new Date(department.created_at).toLocaleDateString()}</small>
                 </div>
@@ -693,7 +1732,30 @@ function DepartmentManagement() {
                   <button onClick={() => handleDelete(department.id)} className="btn btn-delete">삭제</button>
                 </div>
               </div>
-            ))}
+                ))}
+              </div>
+            );
+          }
+        })()}
+        {departmentSearchKeyword && (
+          <div className="search-result-info">
+            검색 결과: {departments.filter(d => {
+              const keyword = departmentSearchKeyword.toLowerCase();
+              const departmentName = (d.department_name || '').toLowerCase();
+              const presidentName = (d.president_name || '').toLowerCase();
+              const vicePresidentName = (d.vice_president_name || '').toLowerCase();
+              const secretaryName = (d.secretary_name || '').toLowerCase();
+              const treasurerName = (d.treasurer_name || '').toLowerCase();
+              const clerkName = (d.clerk_name || '').toLowerCase();
+              const members = (d.members || '').toLowerCase();
+              return departmentName.includes(keyword) || 
+                     presidentName.includes(keyword) ||
+                     vicePresidentName.includes(keyword) ||
+                     secretaryName.includes(keyword) ||
+                     treasurerName.includes(keyword) ||
+                     clerkName.includes(keyword) ||
+                     members.includes(keyword);
+            }).length}개 / 전체 {departments.length}개
           </div>
         )}
       </section>
