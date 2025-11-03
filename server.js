@@ -109,8 +109,17 @@ app.post('/api/members', async (req, res) => {
 
     // 성도 추가
     const [result] = await connection.execute(
-      'INSERT INTO members (name, phone, address, gender, birth_date, baptized, baptized_type, baptism_date, registration_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [name, phone, address || null, gender || null, birth_date || null, baptized || false, baptized_type || null, baptism_date || null, registration_date || null]
+      `INSERT INTO members (name, phone, address, gender, birth_date, baptized, baptized_type, baptism_date, registration_date,
+        dismissal_date, deceased, faith_head, english_name, infant_baptism, email, occupation, work_phone,
+        residence_start_date, previous_address, previous_church, previous_office, baptism_church, baptism_year,
+        baptism_pastor, education, career, faith_life, marriage_anniversary, stay_period, specialty, service_history)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [name, phone, address || null, gender || null, birth_date || null, baptized || false, baptized_type || null, 
+       baptism_date || null, registration_date || null, dismissal_date || null, deceased || false, faith_head || null,
+       english_name || null, infant_baptism || false, email || null, occupation || null, work_phone || null,
+       residence_start_date || null, previous_address || null, previous_church || null, previous_office || null,
+       baptism_church || null, baptism_year || null, baptism_pastor || null, education || null, career || null,
+       faith_life || null, marriage_anniversary || null, stay_period || null, specialty || null, service_history || null]
     );
     
     const memberId = result.insertId;
@@ -180,6 +189,9 @@ app.put('/api/members/:id', async (req, res) => {
     
     const { id } = req.params;
     const { name, phone, address, gender, birth_date, baptized, baptized_type, baptism_date, registration_date,
+            dismissal_date, deceased, faith_head, english_name, infant_baptism, email, occupation, work_phone,
+            residence_start_date, previous_address, previous_church, previous_office, baptism_church, baptism_year,
+            baptism_pastor, education, career, faith_life, marriage_anniversary, stay_period, specialty, service_history,
             office_ids, family_ids, party_ids, department_ids } = req.body;
     
     if (!name || !phone) {
@@ -188,8 +200,18 @@ app.put('/api/members/:id', async (req, res) => {
 
     // 성도 기본 정보 수정
     const [result] = await connection.execute(
-      'UPDATE members SET name = ?, phone = ?, address = ?, gender = ?, birth_date = ?, baptized = ?, baptized_type = ?, baptism_date = ?, registration_date = ? WHERE id = ?',
-      [name, phone, address || null, gender || null, birth_date || null, baptized || false, baptized_type || null, baptism_date || null, registration_date || null, id]
+      `UPDATE members SET name = ?, phone = ?, address = ?, gender = ?, birth_date = ?, baptized = ?, baptized_type = ?, 
+       baptism_date = ?, registration_date = ?, dismissal_date = ?, deceased = ?, faith_head = ?, english_name = ?, 
+       infant_baptism = ?, email = ?, occupation = ?, work_phone = ?, residence_start_date = ?, previous_address = ?, 
+       previous_church = ?, previous_office = ?, baptism_church = ?, baptism_year = ?, baptism_pastor = ?, 
+       education = ?, career = ?, faith_life = ?, marriage_anniversary = ?, stay_period = ?, specialty = ?, 
+       service_history = ? WHERE id = ?`,
+      [name, phone, address || null, gender || null, birth_date || null, baptized || false, baptized_type || null, 
+       baptism_date || null, registration_date || null, dismissal_date || null, deceased || false, faith_head || null,
+       english_name || null, infant_baptism || false, email || null, occupation || null, work_phone || null,
+       residence_start_date || null, previous_address || null, previous_church || null, previous_office || null,
+       baptism_church || null, baptism_year || null, baptism_pastor || null, education || null, career || null,
+       faith_life || null, marriage_anniversary || null, stay_period || null, specialty || null, service_history || null, id]
     );
     
     if (result.affectedRows === 0) {

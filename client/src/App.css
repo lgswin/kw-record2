@@ -117,12 +117,24 @@
   gap: 15px;
 }
 
+.form-row-5 {
+  grid-template-columns: repeat(5, 1fr);
+}
+
 .form-row-4 {
   grid-template-columns: repeat(4, 1fr);
 }
 
 .form-row-3 {
   grid-template-columns: repeat(3, 1fr);
+}
+
+.form-row-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.form-row-address {
+  grid-template-columns: 3fr 1fr 1fr;
 }
 
 .form-group-full {
@@ -414,6 +426,22 @@
   transition: border-color 0.3s;
   background: white;
   cursor: pointer;
+}
+
+.form-group textarea {
+  padding: 12px;
+  border: 2px solid #ddd;
+  border-radius: 5px;
+  font-size: 16px;
+  transition: border-color 0.3s;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 80px;
+}
+
+.form-group textarea:focus {
+  outline: none;
+  border-color: #3498db;
 }
 
 .form-actions {
@@ -708,8 +736,10 @@
     grid-template-columns: 1fr;
   }
   
+  .form-row-5,
   .form-row-4,
-  .form-row-3 {
+  .form-row-3,
+  .form-row-address {
     grid-template-columns: 1fr;
   }
 }

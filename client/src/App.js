@@ -60,6 +60,12 @@ function MemberManagement() {
   const [formData, setFormData] = useState({
     name: '', phone: '', address: '', gender: '',
     birth_date: '', baptized_type: '', baptism_date: '', registration_date: '',
+    dismissal_date: '', deceased: false, faith_head: false, english_name: '',
+    infant_baptism: false, email: '', occupation: '', work_phone: '',
+    residence_start_date: '', previous_address: '', previous_church: '', previous_office: '',
+    baptism_church: '', baptism_year: '', baptism_pastor: '', education: '',
+    career: '', faith_life: '', marriage_anniversary: '', stay_period: '',
+    specialty: '', service_history: '',
     office_ids: [], family_ids: [], party_ids: [], department_ids: []
   });
   const [editingId, setEditingId] = useState(null);
@@ -254,6 +260,28 @@ function MemberManagement() {
         baptized_type: formData.baptized_type || null,
         baptism_date: formData.baptized_type !== '' && formData.baptized_type !== '세례 안받음' ? (formData.baptism_date || null) : null,
         registration_date: formData.registration_date || null,
+        dismissal_date: formData.dismissal_date || null,
+        deceased: formData.deceased || false,
+        faith_head: formData.faith_head || null,
+        english_name: formData.english_name || null,
+        infant_baptism: formData.infant_baptism || false,
+        email: formData.email || null,
+        occupation: formData.occupation || null,
+        work_phone: formData.work_phone || null,
+        residence_start_date: formData.residence_start_date || null,
+        previous_address: formData.previous_address || null,
+        previous_church: formData.previous_church || null,
+        previous_office: formData.previous_office || null,
+        baptism_church: formData.baptism_church || null,
+        baptism_year: formData.baptism_year || null,
+        baptism_pastor: formData.baptism_pastor || null,
+        education: formData.education || null,
+        career: formData.career || null,
+        faith_life: formData.faith_life || null,
+        marriage_anniversary: formData.marriage_anniversary || null,
+        stay_period: formData.stay_period || null,
+        specialty: formData.specialty || null,
+        service_history: formData.service_history || null,
         office_ids: formData.office_ids || [],
         family_ids: formData.family_ids || [],
         party_ids: formData.party_ids || [],
@@ -272,6 +300,12 @@ function MemberManagement() {
       setFormData({
         name: '', phone: '', address: '', gender: '',
         birth_date: '', baptized_type: '', baptism_date: '', registration_date: '',
+        dismissal_date: '', deceased: false, faith_head: '', english_name: '',
+        infant_baptism: false, email: '', occupation: '', work_phone: '',
+        residence_start_date: '', previous_address: '', previous_church: '', previous_office: '',
+        baptism_church: '', baptism_year: '', baptism_pastor: '', education: '',
+        career: '', faith_life: '', marriage_anniversary: '', stay_period: '',
+        specialty: '', service_history: '',
         office_ids: [], family_ids: [], party_ids: [], department_ids: []
       });
       fetchMembers();
@@ -304,6 +338,28 @@ function MemberManagement() {
       baptized_type: member.baptized_type || (member.baptized ? '세례' : '세례 안받음'),
       baptism_date: formatDateForInput(member.baptism_date),
       registration_date: formatDateForInput(member.registration_date),
+      dismissal_date: formatDateForInput(member.dismissal_date),
+      deceased: member.deceased || false,
+      faith_head: member.faith_head ? String(member.faith_head) : '',
+      english_name: member.english_name || '',
+      infant_baptism: member.infant_baptism || false,
+      email: member.email || '',
+      occupation: member.occupation || '',
+      work_phone: member.work_phone || '',
+      residence_start_date: formatDateForInput(member.residence_start_date),
+      previous_address: member.previous_address || '',
+      previous_church: member.previous_church || '',
+      previous_office: member.previous_office || '',
+      baptism_church: member.baptism_church || '',
+      baptism_year: member.baptism_year || '',
+      baptism_pastor: member.baptism_pastor || '',
+      education: member.education || '',
+      career: member.career || '',
+      faith_life: member.faith_life || '',
+      marriage_anniversary: formatDateForInput(member.marriage_anniversary),
+      stay_period: member.stay_period || '',
+      specialty: member.specialty || '',
+      service_history: member.service_history || '',
       office_ids: member.offices ? member.offices.map(o => o.id) : [],
       family_ids: member.families ? member.families.map(f => f.id) : [],
       party_ids: member.parties ? member.parties.map(p => p.id) : [],
@@ -329,6 +385,12 @@ function MemberManagement() {
     setFormData({
       name: '', phone: '', address: '', gender: '',
       birth_date: '', baptized_type: '', baptism_date: '', registration_date: '',
+      dismissal_date: '', deceased: false, faith_head: false, english_name: '',
+      infant_baptism: false, email: '', occupation: '', work_phone: '',
+      residence_start_date: '', previous_address: '', previous_church: '', previous_office: '',
+      baptism_church: '', baptism_year: '', baptism_pastor: '', education: '',
+      career: '', faith_life: '', marriage_anniversary: '', stay_period: '',
+      specialty: '', service_history: '',
       office_ids: [], family_ids: [], party_ids: [], department_ids: []
     });
     setEditingId(null);
@@ -368,35 +430,93 @@ function MemberManagement() {
           {/* 기본 정보 */}
           <div className="form-subsection">
             <h3>기본 정보</h3>
-            <div className="form-row form-row-4">
+            <div className="form-row form-row-5">
               <div className="form-group">
                 <label>이름 *</label>
                 <input type="text" name="name" value={formData.name} onChange={handleInputChange} required />
+              </div>
+              <div className="form-group">
+                <label>영문이름</label>
+                <input type="text" name="english_name" value={formData.english_name} onChange={handleInputChange} />
               </div>
               <div className="form-group">
                 <label>전화번호 *</label>
                 <input type="tel" name="phone" value={formData.phone} onChange={handleInputChange} required />
               </div>
               <div className="form-group">
-                <label>성별</label>
-                <select name="gender" value={formData.gender} onChange={handleInputChange}>
-                  <option value="">선택</option>
-                  <option value="M">남성</option>
-                  <option value="F">여성</option>
-                </select>
+                <label>이메일</label>
+                <input type="email" name="email" value={formData.email} onChange={handleInputChange} />
               </div>
               <div className="form-group">
                 <label>생년월일</label>
                 <input type="date" name="birth_date" value={formData.birth_date} onChange={handleInputChange} />
               </div>
             </div>
-            <div className="form-row">
-              <div className="form-group form-group-full">
+            <div className="form-row form-row-address">
+              <div className="form-group form-group-address">
                 <label>주소</label>
                 <input type="text" name="address" value={formData.address} onChange={handleInputChange} />
               </div>
+              <div className="form-group">
+                <label>거주시작일</label>
+                <input type="date" name="residence_start_date" value={formData.residence_start_date} onChange={handleInputChange} />
+              </div>
+              <div className="form-group">
+                <label>교회등록일</label>
+                <input type="date" name="registration_date" value={formData.registration_date} onChange={handleInputChange} />
+              </div>
             </div>
-            <div className="form-row form-row-3">
+          </div>
+
+          {/* 상세 정보 */}
+          <div className="form-subsection">
+            <h3>상세 정보</h3>
+            <div className="form-row form-row-5">
+              <div className="form-group">
+                <label>직업</label>
+                <input type="text" name="occupation" value={formData.occupation} onChange={handleInputChange} />
+              </div>
+              <div className="form-group">
+                <label>직장번호</label>
+                <input type="tel" name="work_phone" value={formData.work_phone} onChange={handleInputChange} />
+              </div>
+              <div className="form-group">
+                <label>결혼기념일</label>
+                <input type="date" name="marriage_anniversary" value={formData.marriage_anniversary} onChange={handleInputChange} />
+              </div>
+              <div className="form-group">
+                <label>전 거주지</label>
+                <input type="text" name="previous_address" value={formData.previous_address} onChange={handleInputChange} />
+              </div>
+              <div className="form-group">
+                <label>체류예정기간</label>
+                <input type="text" name="stay_period" value={formData.stay_period} onChange={handleInputChange} placeholder="예: 2년" />
+              </div>
+            </div>
+            <div className="form-row form-row-4">
+              <div className="form-group">
+                <label>학력</label>
+                <input type="text" name="education" value={formData.education} onChange={handleInputChange} />
+              </div>
+              <div className="form-group">
+                <label>사회경력</label>
+                <input type="text" name="career" value={formData.career} onChange={handleInputChange} />
+              </div>
+              <div className="form-group">
+                <label>특기</label>
+                <input type="text" name="specialty" value={formData.specialty} onChange={handleInputChange} />
+              </div>
+              <div className="form-group">
+                <label>봉사경력</label>
+                <input type="text" name="service_history" value={formData.service_history} onChange={handleInputChange} />
+              </div>
+            </div>
+          </div>
+
+          {/* 신앙 정보 */}
+          <div className="form-subsection">
+            <h3>신앙 정보</h3>
+            <div className="form-row form-row-5">
               <div className="form-group">
                 <label>세례 여부</label>
                 <select name="baptized_type" value={formData.baptized_type} onChange={handleInputChange}>
@@ -408,18 +528,50 @@ function MemberManagement() {
                 </select>
               </div>
               <div className="form-group">
-                <label>세례일자</label>
-                <input 
-                  type="date" 
-                  name="baptism_date" 
-                  value={formData.baptism_date} 
-                  onChange={handleInputChange} 
-                  disabled={formData.baptized_type === '' || formData.baptized_type === '세례 안받음'} 
-                />
+                <label>유아세례 여부</label>
+                <div className="checkbox-container">
+                  <input
+                    type="checkbox"
+                    name="infant_baptism"
+                    checked={formData.infant_baptism}
+                    onChange={(e) => setFormData(prev => ({ ...prev, infant_baptism: e.target.checked }))}
+                    className="checkbox-large"
+                    id="infant_baptism"
+                  />
+                  <label htmlFor="infant_baptism" className="checkbox-label-large">
+                    {formData.infant_baptism ? '예' : '아니오'}
+                  </label>
+                </div>
               </div>
               <div className="form-group">
-                <label>등록일</label>
-                <input type="date" name="registration_date" value={formData.registration_date} onChange={handleInputChange} />
+                <label>세례교회</label>
+                <input type="text" name="baptism_church" value={formData.baptism_church} onChange={handleInputChange} />
+              </div>
+              <div className="form-group">
+                <label>세례년도</label>
+                <input type="number" name="baptism_year" value={formData.baptism_year} onChange={handleInputChange} min="1900" max="2100" />
+              </div>
+              <div className="form-group">
+                <label>세례 목사</label>
+                <input type="text" name="baptism_pastor" value={formData.baptism_pastor} onChange={handleInputChange} />
+              </div>
+            </div>
+            <div className="form-row form-row-4">
+              <div className="form-group">
+                <label>섬기던교회</label>
+                <input type="text" name="previous_church" value={formData.previous_church} onChange={handleInputChange} />
+              </div>
+              <div className="form-group">
+                <label>전교회직분</label>
+                <input type="text" name="previous_office" value={formData.previous_office} onChange={handleInputChange} />
+              </div>
+              <div className="form-group">
+                <label>신앙생활시작</label>
+                <input type="text" name="faith_life" value={formData.faith_life} onChange={handleInputChange} />
+              </div>
+              <div className="form-group">
+                <label>신앙세대주</label>
+                <input type="text" name="faith_head" value={formData.faith_head} onChange={handleInputChange} />
               </div>
             </div>
           </div>
