@@ -466,7 +466,7 @@ function MemberManagement() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', marginBottom: '20px' }}>
         <h2 style={{ margin: 0 }}>{editingId ? '성도 정보 수정' : '새 성도 등록'}</h2>
         <button 
           type="button"
@@ -1097,7 +1097,7 @@ function FamilyManagement() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', marginBottom: '20px' }}>
         <h2 style={{ margin: 0 }}>{editingId ? '가족 정보 수정' : '새 가족 등록'}</h2>
         <button 
           type="button"
@@ -1422,7 +1422,7 @@ function PartyManagement() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', marginBottom: '20px' }}>
         <h2 style={{ margin: 0 }}>{editingId ? '순모임 정보 수정' : '새 순모임 등록'}</h2>
         <button 
           type="button"
@@ -1873,7 +1873,7 @@ function DepartmentManagement() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', marginBottom: '20px' }}>
         <h2 style={{ margin: 0 }}>{editingId ? '부서 정보 수정' : '새 부서 등록'}</h2>
         <button 
           type="button"
