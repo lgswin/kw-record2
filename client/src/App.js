@@ -64,7 +64,7 @@ function MemberManagement() {
   });
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [showForm, setShowForm] = useState(true); // 폼 표시 여부
+  const [showForm, setShowForm] = useState(false); // 폼 표시 여부 (초기값: 숨김)
   const [searchInputs, setSearchInputs] = useState({
     office: '', family: '', party: '', department: ''
   });
@@ -726,7 +726,7 @@ function FamilyManagement() {
   const [showMemberDropdown, setShowMemberDropdown] = useState(false);
   const [familySearchKeyword, setFamilySearchKeyword] = useState('');
   const [editingId, setEditingId] = useState(null);
-  const [showForm, setShowForm] = useState(true); // 폼 표시 여부
+  const [showForm, setShowForm] = useState(false); // 폼 표시 여부 (초기값: 숨김)
 
   useEffect(() => {
     fetchFamilies();
@@ -1047,7 +1047,7 @@ function PartyManagement() {
   const [showMemberDropdown, setShowMemberDropdown] = useState(false);
   const [partySearchKeyword, setPartySearchKeyword] = useState('');
   const [editingId, setEditingId] = useState(null);
-  const [showForm, setShowForm] = useState(true); // 폼 표시 여부
+  const [showForm, setShowForm] = useState(false); // 폼 표시 여부 (초기값: 숨김)
 
   useEffect(() => {
     fetchParties();
@@ -1399,7 +1399,7 @@ function DepartmentManagement() {
     president: false, vice_president: false, secretary: false, treasurer: false, clerk: false
   });
   const [editingId, setEditingId] = useState(null);
-  const [showForm, setShowForm] = useState(true); // 폼 표시 여부
+  const [showForm, setShowForm] = useState(false); // 폼 표시 여부 (초기값: 숨김)
 
   useEffect(() => {
     fetchDepartments();
