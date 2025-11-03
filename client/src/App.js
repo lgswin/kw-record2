@@ -64,6 +64,7 @@ function MemberManagement() {
   });
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [showForm, setShowForm] = useState(true); // 폼 표시 여부
   const [searchInputs, setSearchInputs] = useState({
     office: '', family: '', party: '', department: ''
   });
@@ -274,10 +275,23 @@ function MemberManagement() {
         office_ids: [], family_ids: [], party_ids: [], department_ids: []
       });
       fetchMembers();
+      setShowForm(false); // 저장 후 폼 숨기기
     } catch (error) {
       console.error('성도 저장 오류:', error);
       alert('저장에 실패했습니다.');
     }
+  };
+
+  // 날짜 문자열을 yyyy-MM-dd 형식으로 변환하는 헬퍼 함수
+  const formatDateForInput = (dateString) => {
+    if (!dateString) return '';
+    // ISO 형식 (2020-01-01T05:00:00.000Z) 또는 다른 형식을 yyyy-MM-dd로 변환
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return '';
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
   const handleEdit = (member) => {
@@ -286,10 +300,10 @@ function MemberManagement() {
       phone: member.phone || '',
       address: member.address || '',
       gender: member.gender || '',
-      birth_date: member.birth_date || '',
+      birth_date: formatDateForInput(member.birth_date),
       baptized_type: member.baptized_type || (member.baptized ? '세례' : '세례 안받음'),
-      baptism_date: member.baptism_date || '',
-      registration_date: member.registration_date || '',
+      baptism_date: formatDateForInput(member.baptism_date),
+      registration_date: formatDateForInput(member.registration_date),
       office_ids: member.offices ? member.offices.map(o => o.id) : [],
       family_ids: member.families ? member.families.map(f => f.id) : [],
       party_ids: member.parties ? member.parties.map(p => p.id) : [],
@@ -298,6 +312,17 @@ function MemberManagement() {
     setEditingId(member.id);
     setSearchInputs({ office: '', family: '', party: '', department: '' });
     setShowDropdowns({ office: false, family: false, party: false, department: false });
+    
+    // 폼이 숨겨져 있으면 표시
+    setShowForm(true);
+    
+    // 폼 섹션으로 스크롤 이동
+    setTimeout(() => {
+      const formSection = document.querySelector('.form-section');
+      if (formSection) {
+        formSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
   };
 
   const handleCancelEdit = () => {
@@ -309,6 +334,7 @@ function MemberManagement() {
     setEditingId(null);
     setSearchInputs({ office: '', family: '', party: '', department: '' });
     setShowDropdowns({ office: false, family: false, party: false, department: false });
+    setShowForm(false); // 취소 시 폼 숨기기
   };
 
   const handleDelete = async (id) => {
@@ -325,8 +351,19 @@ function MemberManagement() {
 
   return (
     <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h2 style={{ margin: 0 }}>{editingId ? '성도 정보 수정' : '새 성도 등록'}</h2>
+        <button 
+          type="button"
+          onClick={() => setShowForm(prev => !prev)}
+          className="btn btn-secondary"
+          style={{ minWidth: '100px' }}
+        >
+          {showForm ? '숨기기' : '보이기'}
+        </button>
+      </div>
+      {showForm && (
       <section className="form-section">
-        <h2>{editingId ? '성도 정보 수정' : '새 성도 등록'}</h2>
         <form onSubmit={handleSubmit} className="member-form">
           {/* 기본 정보 */}
           <div className="form-subsection">
@@ -567,6 +604,7 @@ function MemberManagement() {
           </div>
         </form>
       </section>
+      )}
 
       <section className="list-section">
         <div className="list-header">
@@ -627,7 +665,12 @@ function MemberManagement() {
                   </thead>
                   <tbody>
                     {filteredMembers.map(member => (
-                      <tr key={member.id}>
+                      <tr 
+                        key={member.id}
+                        onClick={() => handleEdit(member)}
+                        className="member-row-clickable"
+                        style={{ cursor: 'pointer' }}
+                      >
                         <td>{member.name}</td>
                         <td>{member.phone}</td>
                         <td>{member.address || '-'}</td>
@@ -638,7 +681,7 @@ function MemberManagement() {
                         <td>{member.parties && member.parties.length > 0 ? member.parties.map(p => p.party_name).join(', ') : '-'}</td>
                         <td>{member.departments && member.departments.length > 0 ? member.departments.map(d => d.department_name).join(', ') : '-'}</td>
                         <td>{new Date(member.created_at).toLocaleDateString()}</td>
-                        <td>
+                        <td onClick={(e) => e.stopPropagation()}>
                           <div className="member-actions">
                             <button onClick={() => handleEdit(member)} className="btn btn-edit">수정</button>
                             <button onClick={() => handleDelete(member.id)} className="btn btn-delete">삭제</button>
@@ -683,6 +726,7 @@ function FamilyManagement() {
   const [showMemberDropdown, setShowMemberDropdown] = useState(false);
   const [familySearchKeyword, setFamilySearchKeyword] = useState('');
   const [editingId, setEditingId] = useState(null);
+  const [showForm, setShowForm] = useState(true); // 폼 표시 여부
 
   useEffect(() => {
     fetchFamilies();
@@ -786,6 +830,17 @@ function FamilyManagement() {
     });
     setMemberSearchInput('');
     setShowMemberDropdown(false);
+    
+    // 폼이 숨겨져 있으면 표시
+    setShowForm(true);
+    
+    // 폼 섹션으로 스크롤 이동
+    setTimeout(() => {
+      const formSection = document.querySelector('.form-section');
+      if (formSection) {
+        formSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
   };
 
   const handleCancelEdit = () => {
@@ -793,6 +848,7 @@ function FamilyManagement() {
     setFormData({ family_name: '', member_ids: [] });
     setMemberSearchInput('');
     setShowMemberDropdown(false);
+    setShowForm(false); // 취소 시 폼 숨기기
   };
 
   const handleSubmit = async (e) => {
@@ -815,6 +871,7 @@ function FamilyManagement() {
       setShowMemberDropdown(false);
       setEditingId(null);
       fetchFamilies();
+      setShowForm(false); // 저장 후 폼 숨기기
     } catch (error) {
       console.error(editingId ? '가족 수정 오류:' : '가족 등록 오류:', error);
       alert(editingId ? '수정에 실패했습니다.' : '등록에 실패했습니다.');
@@ -835,8 +892,19 @@ function FamilyManagement() {
 
   return (
     <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h2 style={{ margin: 0 }}>{editingId ? '가족 정보 수정' : '새 가족 등록'}</h2>
+        <button 
+          type="button"
+          onClick={() => setShowForm(prev => !prev)}
+          className="btn btn-secondary"
+          style={{ minWidth: '100px' }}
+        >
+          {showForm ? '숨기기' : '보이기'}
+        </button>
+      </div>
+      {showForm && (
       <section className="form-section">
-        <h2>{editingId ? '가족 정보 수정' : '새 가족 등록'}</h2>
         <form onSubmit={handleSubmit} className="member-form">
           <div className="form-group">
             <label>가족명 *</label>
@@ -888,6 +956,7 @@ function FamilyManagement() {
           </div>
         </form>
       </section>
+      )}
 
       <section className="list-section">
         <div className="list-header">
@@ -930,11 +999,16 @@ function FamilyManagement() {
                   </thead>
                   <tbody>
                     {filteredFamilies.map(family => (
-                      <tr key={family.id}>
+                      <tr 
+                        key={family.id}
+                        onClick={() => handleEdit(family)}
+                        className="member-row-clickable"
+                        style={{ cursor: 'pointer' }}
+                      >
                         <td>{family.family_name}</td>
                         <td>{family.members || '-'}</td>
                         <td>{new Date(family.created_at).toLocaleDateString()}</td>
-                        <td>
+                        <td onClick={(e) => e.stopPropagation()}>
                           <div className="member-actions">
                             <button onClick={() => handleEdit(family)} className="btn btn-edit">수정</button>
                             <button onClick={() => handleDelete(family.id)} className="btn btn-delete">삭제</button>
@@ -973,6 +1047,7 @@ function PartyManagement() {
   const [showMemberDropdown, setShowMemberDropdown] = useState(false);
   const [partySearchKeyword, setPartySearchKeyword] = useState('');
   const [editingId, setEditingId] = useState(null);
+  const [showForm, setShowForm] = useState(true); // 폼 표시 여부
 
   useEffect(() => {
     fetchParties();
@@ -1080,6 +1155,17 @@ function PartyManagement() {
     });
     setMemberSearchInput('');
     setShowMemberDropdown(false);
+    
+    // 폼이 숨겨져 있으면 표시
+    setShowForm(true);
+    
+    // 폼 섹션으로 스크롤 이동
+    setTimeout(() => {
+      const formSection = document.querySelector('.form-section');
+      if (formSection) {
+        formSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
   };
 
   const handleCancelEdit = () => {
@@ -1087,6 +1173,7 @@ function PartyManagement() {
     setFormData({ party_name: '', leader_id: '', member_ids: [] });
     setMemberSearchInput('');
     setShowMemberDropdown(false);
+    setShowForm(false); // 취소 시 폼 숨기기
   };
 
   const handleSubmit = async (e) => {
@@ -1109,6 +1196,7 @@ function PartyManagement() {
       setShowMemberDropdown(false);
       setEditingId(null);
       fetchParties();
+      setShowForm(false); // 저장 후 폼 숨기기
     } catch (error) {
       console.error(editingId ? '순모임 수정 오류:' : '순모임 등록 오류:', error);
       alert(editingId ? '수정에 실패했습니다.' : '등록에 실패했습니다.');
@@ -1129,8 +1217,19 @@ function PartyManagement() {
 
   return (
     <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h2 style={{ margin: 0 }}>{editingId ? '순모임 정보 수정' : '새 순모임 등록'}</h2>
+        <button 
+          type="button"
+          onClick={() => setShowForm(prev => !prev)}
+          className="btn btn-secondary"
+          style={{ minWidth: '100px' }}
+        >
+          {showForm ? '숨기기' : '보이기'}
+        </button>
+      </div>
+      {showForm && (
       <section className="form-section">
-        <h2>{editingId ? '순모임 정보 수정' : '새 순모임 등록'}</h2>
         <form onSubmit={handleSubmit} className="member-form">
           <div className="form-group">
             <label>순명 *</label>
@@ -1191,6 +1290,7 @@ function PartyManagement() {
           </div>
         </form>
       </section>
+      )}
 
       <section className="list-section">
         <div className="list-header">
@@ -1235,12 +1335,17 @@ function PartyManagement() {
                   </thead>
                   <tbody>
                     {filteredParties.map(party => (
-                      <tr key={party.id}>
+                      <tr 
+                        key={party.id}
+                        onClick={() => handleEdit(party)}
+                        className="member-row-clickable"
+                        style={{ cursor: 'pointer' }}
+                      >
                         <td>{party.party_name}</td>
                         <td>{party.leader_name || '-'}</td>
                         <td>{party.members || '-'}</td>
                         <td>{new Date(party.created_at).toLocaleDateString()}</td>
-                        <td>
+                        <td onClick={(e) => e.stopPropagation()}>
                           <div className="member-actions">
                             <button onClick={() => handleEdit(party)} className="btn btn-edit">수정</button>
                             <button onClick={() => handleDelete(party.id)} className="btn btn-delete">삭제</button>
@@ -1294,6 +1399,7 @@ function DepartmentManagement() {
     president: false, vice_president: false, secretary: false, treasurer: false, clerk: false
   });
   const [editingId, setEditingId] = useState(null);
+  const [showForm, setShowForm] = useState(true); // 폼 표시 여부
 
   useEffect(() => {
     fetchDepartments();
@@ -1484,6 +1590,14 @@ function DepartmentManagement() {
     setShowMemberDropdown(false);
     setPositionSearchInputs({ president: '', vice_president: '', secretary: '', treasurer: '', clerk: '' });
     setShowPositionDropdowns({ president: false, vice_president: false, secretary: false, treasurer: false, clerk: false });
+    
+    // 폼 섹션으로 스크롤 이동
+    setTimeout(() => {
+      const formSection = document.querySelector('.form-section');
+      if (formSection) {
+        formSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
   };
 
   const handleCancelEdit = () => {
@@ -1501,6 +1615,7 @@ function DepartmentManagement() {
     setShowMemberDropdown(false);
     setPositionSearchInputs({ president: '', vice_president: '', secretary: '', treasurer: '', clerk: '' });
     setShowPositionDropdowns({ president: false, vice_president: false, secretary: false, treasurer: false, clerk: false });
+    setShowForm(false); // 취소 시 폼 숨기기
   };
 
   const handleSubmit = async (e) => {
@@ -1553,8 +1668,19 @@ function DepartmentManagement() {
 
   return (
     <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h2 style={{ margin: 0 }}>{editingId ? '부서 정보 수정' : '새 부서 등록'}</h2>
+        <button 
+          type="button"
+          onClick={() => setShowForm(prev => !prev)}
+          className="btn btn-secondary"
+          style={{ minWidth: '100px' }}
+        >
+          {showForm ? '숨기기' : '보이기'}
+        </button>
+      </div>
+      {showForm && (
       <section className="form-section">
-        <h2>{editingId ? '부서 정보 수정' : '새 부서 등록'}</h2>
         <form onSubmit={handleSubmit} className="member-form">
           <div className="form-group">
             <label>부서명 *</label>
@@ -1821,6 +1947,7 @@ function DepartmentManagement() {
           </div>
         </form>
       </section>
+      )}
 
       <section className="list-section">
         <div className="list-header">
@@ -1879,7 +2006,12 @@ function DepartmentManagement() {
                   </thead>
                   <tbody>
                     {filteredDepartments.map(department => (
-                      <tr key={department.id}>
+                      <tr 
+                        key={department.id}
+                        onClick={() => handleEdit(department)}
+                        className="member-row-clickable"
+                        style={{ cursor: 'pointer' }}
+                      >
                         <td>{department.department_name}</td>
                         <td>{department.president_name || '-'}</td>
                         <td>{department.vice_president_name || '-'}</td>
@@ -1888,7 +2020,7 @@ function DepartmentManagement() {
                         <td>{department.clerk_name || '-'}</td>
                         <td>{department.members || '-'}</td>
                         <td>{new Date(department.created_at).toLocaleDateString()}</td>
-                        <td>
+                        <td onClick={(e) => e.stopPropagation()}>
                           <div className="member-actions">
                             <button onClick={() => handleEdit(department)} className="btn btn-edit">수정</button>
                             <button onClick={() => handleDelete(department.id)} className="btn btn-delete">삭제</button>
