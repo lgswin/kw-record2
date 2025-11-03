@@ -80,11 +80,32 @@ function MemberManagement() {
   const [searchKeyword, setSearchKeyword] = useState('');
 
   useEffect(() => {
-    fetchMembers();
-    fetchOffices();
-    fetchFamilies();
-    fetchParties();
-    fetchDepartments();
+    // 컴포넌트가 마운트되었는지 추적
+    let isMounted = true;
+    const abortController = new AbortController();
+
+    const fetchData = async () => {
+      try {
+        await Promise.all([
+          fetchMembers(abortController.signal, isMounted),
+          fetchOffices(abortController.signal, isMounted),
+          fetchFamilies(abortController.signal, isMounted),
+          fetchParties(abortController.signal, isMounted),
+          fetchDepartments(abortController.signal, isMounted)
+        ]);
+      } catch (error) {
+        if (!abortController.signal.aborted && isMounted) {
+          console.error('데이터 조회 오류:', error);
+        }
+      }
+    };
+
+    fetchData();
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
   }, []);
 
   // 외부 클릭 시 드롭다운 닫기
@@ -101,57 +122,85 @@ function MemberManagement() {
     };
   }, []);
 
-  const fetchMembers = async () => {
+  const fetchMembers = async (signal, isMounted) => {
     try {
-      setLoading(true);
-      const response = await axios.get(`${API_URL}/members`);
-      setMembers(Array.isArray(response.data) ? response.data : []);
+      if (isMounted) setLoading(true);
+      const response = await axios.get(`${API_URL}/members`, { signal });
+      if (isMounted) {
+        setMembers(Array.isArray(response.data) ? response.data : []);
+      }
     } catch (error) {
-      console.error('성도 목록 조회 오류:', error);
-      alert('성도 목록을 가져올 수 없습니다.');
-      setMembers([]);
+      if (axios.isCancel(error)) return; // 요청 취소는 에러로 처리하지 않음
+      if (isMounted) {
+        console.error('성도 목록 조회 오류:', error);
+        // 네트워크 에러가 아닌 경우에만 알림 표시
+        if (!error.response || error.response.status !== 0) {
+          alert('성도 목록을 가져올 수 없습니다.');
+        }
+        setMembers([]);
+      }
     } finally {
-      setLoading(false);
+      if (isMounted) setLoading(false);
     }
   };
 
-  const fetchOffices = async () => {
+  const fetchOffices = async (signal, isMounted) => {
     try {
-      const response = await axios.get(`${API_URL}/offices`);
-      setOffices(Array.isArray(response.data) ? response.data : []);
+      const response = await axios.get(`${API_URL}/offices`, { signal });
+      if (isMounted) {
+        setOffices(Array.isArray(response.data) ? response.data : []);
+      }
     } catch (error) {
-      console.error('직분 목록 조회 오류:', error);
-      setOffices([]);
+      if (axios.isCancel(error)) return;
+      if (isMounted) {
+        console.error('직분 목록 조회 오류:', error);
+        setOffices([]);
+      }
     }
   };
 
-  const fetchFamilies = async () => {
+  const fetchFamilies = async (signal, isMounted) => {
     try {
-      const response = await axios.get(`${API_URL}/families`);
-      setFamilies(Array.isArray(response.data) ? response.data : []);
+      const response = await axios.get(`${API_URL}/families`, { signal });
+      if (isMounted) {
+        setFamilies(Array.isArray(response.data) ? response.data : []);
+      }
     } catch (error) {
-      console.error('가족 목록 조회 오류:', error);
-      setFamilies([]);
+      if (axios.isCancel(error)) return;
+      if (isMounted) {
+        console.error('가족 목록 조회 오류:', error);
+        setFamilies([]);
+      }
     }
   };
 
-  const fetchParties = async () => {
+  const fetchParties = async (signal, isMounted) => {
     try {
-      const response = await axios.get(`${API_URL}/parties`);
-      setParties(Array.isArray(response.data) ? response.data : []);
+      const response = await axios.get(`${API_URL}/parties`, { signal });
+      if (isMounted) {
+        setParties(Array.isArray(response.data) ? response.data : []);
+      }
     } catch (error) {
-      console.error('순모임 목록 조회 오류:', error);
-      setParties([]);
+      if (axios.isCancel(error)) return;
+      if (isMounted) {
+        console.error('순모임 목록 조회 오류:', error);
+        setParties([]);
+      }
     }
   };
 
-  const fetchDepartments = async () => {
+  const fetchDepartments = async (signal, isMounted) => {
     try {
-      const response = await axios.get(`${API_URL}/departments`);
-      setDepartments(Array.isArray(response.data) ? response.data : []);
+      const response = await axios.get(`${API_URL}/departments`, { signal });
+      if (isMounted) {
+        setDepartments(Array.isArray(response.data) ? response.data : []);
+      }
     } catch (error) {
-      console.error('부서 목록 조회 오류:', error);
-      setDepartments([]);
+      if (axios.isCancel(error)) return;
+      if (isMounted) {
+        console.error('부서 목록 조회 오류:', error);
+        setDepartments([]);
+      }
     }
   };
 
@@ -311,8 +360,10 @@ function MemberManagement() {
       fetchMembers();
       setShowForm(false); // 저장 후 폼 숨기기
     } catch (error) {
+      if (axios.isCancel(error)) return; // 요청 취소는 무시
       console.error('성도 저장 오류:', error);
-      alert('저장에 실패했습니다.');
+      const errorMessage = error.response?.data?.message || error.message || '저장에 실패했습니다.';
+      alert(errorMessage);
     }
   };
 
@@ -406,8 +457,10 @@ function MemberManagement() {
       alert('성도가 삭제되었습니다.');
       fetchMembers();
     } catch (error) {
+      if (axios.isCancel(error)) return; // 요청 취소는 무시
       console.error('성도 삭제 오류:', error);
-      alert('삭제에 실패했습니다.');
+      const errorMessage = error.response?.data?.message || error.message || '삭제에 실패했습니다.';
+      alert(errorMessage);
     }
   };
 
