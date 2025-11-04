@@ -2,7 +2,10 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './App.css';
 
-const API_URL = 'http://localhost:5001/api';
+// 개발 환경에서는 localhost 사용, 프로덕션에서는 상대 경로 사용
+const API_URL = process.env.NODE_ENV === 'production' 
+  ? '/api' 
+  : (process.env.REACT_APP_API_URL || 'http://localhost:5001/api');
 
 function App() {
   const [activeTab, setActiveTab] = useState('members');
