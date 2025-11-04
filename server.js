@@ -38,6 +38,20 @@ app.get('/api/members', async (req, res) => {
     
     // 각 성도의 관계 정보 조회
     for (let member of members) {
+      // visit_dates JSON 파싱
+      if (member.visit_dates) {
+        try {
+          if (typeof member.visit_dates === 'string') {
+            member.visit_dates = JSON.parse(member.visit_dates);
+          }
+        } catch (e) {
+          console.error('visit_dates 파싱 오류:', e);
+          member.visit_dates = [];
+        }
+      } else {
+        member.visit_dates = [];
+      }
+      
       // 직분 조회
       const [offices] = await pool.execute(
         'SELECT o.id, o.office_name FROM member_offices mo JOIN offices o ON mo.office_id = o.id WHERE mo.member_id = ?',
@@ -87,7 +101,23 @@ app.get('/api/members/:id', async (req, res) => {
       return res.status(404).json({ error: '성도를 찾을 수 없습니다.' });
     }
     
-    res.json(rows[0]);
+    const member = rows[0];
+    
+    // visit_dates JSON 파싱
+    if (member.visit_dates) {
+      try {
+        if (typeof member.visit_dates === 'string') {
+          member.visit_dates = JSON.parse(member.visit_dates);
+        }
+      } catch (e) {
+        console.error('visit_dates 파싱 오류:', e);
+        member.visit_dates = [];
+      }
+    } else {
+      member.visit_dates = [];
+    }
+    
+    res.json(member);
   } catch (error) {
     console.error('성도 조회 오류:', error);
     res.status(500).json({ error: '성도 정보를 가져올 수 없습니다.' });
@@ -101,25 +131,28 @@ app.post('/api/members', async (req, res) => {
     await connection.beginTransaction();
     
     const { name, phone, address, gender, birth_date, baptized, baptized_type, baptism_date, registration_date, 
-            office_ids, family_ids, party_ids, department_ids } = req.body;
+            office_ids, family_ids, party_ids, department_ids, active, visit_dates, notes } = req.body;
     
     if (!name || !phone) {
       return res.status(400).json({ error: '이름과 전화번호는 필수입니다.' });
     }
 
     // 성도 추가
+    const visitDatesJson = visit_dates && Array.isArray(visit_dates) ? JSON.stringify(visit_dates) : null;
     const [result] = await connection.execute(
       `INSERT INTO members (name, phone, address, gender, birth_date, baptized, baptized_type, baptism_date, registration_date,
         dismissal_date, deceased, faith_head, english_name, infant_baptism, email, occupation, work_phone,
         residence_start_date, previous_address, previous_church, previous_office, baptism_church, baptism_year,
-        baptism_pastor, education, career, faith_life, marriage_anniversary, stay_period, specialty, service_history)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        baptism_pastor, education, career, faith_life, marriage_anniversary, stay_period, specialty, service_history,
+        active, visit_dates, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [name, phone, address || null, gender || null, birth_date || null, baptized || false, baptized_type || null, 
        baptism_date || null, registration_date || null, dismissal_date || null, deceased || false, faith_head || null,
        english_name || null, infant_baptism || false, email || null, occupation || null, work_phone || null,
        residence_start_date || null, previous_address || null, previous_church || null, previous_office || null,
        baptism_church || null, baptism_year || null, baptism_pastor || null, education || null, career || null,
-       faith_life || null, marriage_anniversary || null, stay_period || null, specialty || null, service_history || null]
+       faith_life || null, marriage_anniversary || null, stay_period || null, specialty || null, service_history || null,
+       active !== undefined ? active : true, visitDatesJson, notes || null]
     );
     
     const memberId = result.insertId;
@@ -192,27 +225,42 @@ app.put('/api/members/:id', async (req, res) => {
             dismissal_date, deceased, faith_head, english_name, infant_baptism, email, occupation, work_phone,
             residence_start_date, previous_address, previous_church, previous_office, baptism_church, baptism_year,
             baptism_pastor, education, career, faith_life, marriage_anniversary, stay_period, specialty, service_history,
-            office_ids, family_ids, party_ids, department_ids } = req.body;
+            office_ids, family_ids, party_ids, department_ids, active, visit_dates, notes } = req.body;
+    
+    console.log('성도 수정 요청:', { id, name, phone });
+    console.log('수정할 데이터:', { 
+      address, gender, birth_date, baptized_type, email, occupation,
+      active, visit_dates: visit_dates?.length || 0, notes: notes?.substring(0, 50) || ''
+    });
     
     if (!name || !phone) {
+      await connection.rollback();
       return res.status(400).json({ error: '이름과 전화번호는 필수입니다.' });
     }
 
     // 성도 기본 정보 수정
+    const visitDatesJson = visit_dates && Array.isArray(visit_dates) ? JSON.stringify(visit_dates) : null;
+    const updateParams = [
+      name, phone, address || null, gender || null, birth_date || null, baptized || false, baptized_type || null, 
+      baptism_date || null, registration_date || null, dismissal_date || null, deceased || false, faith_head || null,
+      english_name || null, infant_baptism || false, email || null, occupation || null, work_phone || null,
+      residence_start_date || null, previous_address || null, previous_church || null, previous_office || null,
+      baptism_church || null, baptism_year || null, baptism_pastor || null, education || null, career || null,
+      faith_life || null, marriage_anniversary || null, stay_period || null, specialty || null, service_history || null,
+      active !== undefined ? active : true, visitDatesJson, notes || null, id
+    ];
+    
     const [result] = await connection.execute(
       `UPDATE members SET name = ?, phone = ?, address = ?, gender = ?, birth_date = ?, baptized = ?, baptized_type = ?, 
        baptism_date = ?, registration_date = ?, dismissal_date = ?, deceased = ?, faith_head = ?, english_name = ?, 
        infant_baptism = ?, email = ?, occupation = ?, work_phone = ?, residence_start_date = ?, previous_address = ?, 
        previous_church = ?, previous_office = ?, baptism_church = ?, baptism_year = ?, baptism_pastor = ?, 
        education = ?, career = ?, faith_life = ?, marriage_anniversary = ?, stay_period = ?, specialty = ?, 
-       service_history = ? WHERE id = ?`,
-      [name, phone, address || null, gender || null, birth_date || null, baptized || false, baptized_type || null, 
-       baptism_date || null, registration_date || null, dismissal_date || null, deceased || false, faith_head || null,
-       english_name || null, infant_baptism || false, email || null, occupation || null, work_phone || null,
-       residence_start_date || null, previous_address || null, previous_church || null, previous_office || null,
-       baptism_church || null, baptism_year || null, baptism_pastor || null, education || null, career || null,
-       faith_life || null, marriage_anniversary || null, stay_period || null, specialty || null, service_history || null, id]
+       service_history = ?, active = ?, visit_dates = ?, notes = ? WHERE id = ?`,
+      updateParams
     );
+    
+    console.log('UPDATE 결과:', { affectedRows: result.affectedRows });
     
     if (result.affectedRows === 0) {
       await connection.rollback();
@@ -264,6 +312,8 @@ app.put('/api/members/:id', async (req, res) => {
 
     await connection.commit();
     
+    console.log('성도 수정 성공:', id);
+    
     res.json({ 
       id: parseInt(id), 
       name, 
@@ -273,7 +323,12 @@ app.put('/api/members/:id', async (req, res) => {
   } catch (error) {
     await connection.rollback();
     console.error('성도 수정 오류:', error);
-    res.status(500).json({ error: '성도 정보 수정에 실패했습니다.' });
+    console.error('에러 상세:', error.message);
+    console.error('스택:', error.stack);
+    res.status(500).json({ 
+      error: '성도 정보 수정에 실패했습니다.',
+      details: error.message 
+    });
   } finally {
     connection.release();
   }

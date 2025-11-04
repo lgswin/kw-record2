@@ -69,6 +69,7 @@ function MemberManagement() {
     baptism_church: '', baptism_year: '', baptism_pastor: '', education: '',
     career: '', faith_life: '', marriage_anniversary: '', stay_period: '',
     specialty: '', service_history: '',
+    active: true, visit_dates: [], notes: '',
     office_ids: [], family_ids: [], party_ids: [], department_ids: []
   });
   const [editingId, setEditingId] = useState(null);
@@ -334,6 +335,9 @@ function MemberManagement() {
         stay_period: formData.stay_period || null,
         specialty: formData.specialty || null,
         service_history: formData.service_history || null,
+        active: formData.active !== undefined ? formData.active : true,
+        visit_dates: formData.visit_dates && Array.isArray(formData.visit_dates) ? formData.visit_dates : [],
+        notes: formData.notes || null,
         office_ids: formData.office_ids || [],
         family_ids: formData.family_ids || [],
         party_ids: formData.party_ids || [],
@@ -341,11 +345,15 @@ function MemberManagement() {
       };
 
       if (editingId) {
-        await axios.put(`${API_URL}/members/${editingId}`, submitData);
+        console.log('수정 요청 데이터:', submitData);
+        const response = await axios.put(`${API_URL}/members/${editingId}`, submitData);
+        console.log('수정 응답:', response.data);
         alert('성도 정보가 수정되었습니다.');
         setEditingId(null);
       } else {
-        await axios.post(`${API_URL}/members`, submitData);
+        console.log('추가 요청 데이터:', submitData);
+        const response = await axios.post(`${API_URL}/members`, submitData);
+        console.log('추가 응답:', response.data);
         alert('새 성도가 추가되었습니다.');
       }
       
@@ -358,15 +366,33 @@ function MemberManagement() {
         baptism_church: '', baptism_year: '', baptism_pastor: '', education: '',
         career: '', faith_life: '', marriage_anniversary: '', stay_period: '',
         specialty: '', service_history: '',
+        active: true, visit_dates: [], notes: '',
         office_ids: [], family_ids: [], party_ids: [], department_ids: []
       });
-      fetchMembers();
+      
+      // 목록 새로고침 (AbortController 없이 호출)
+      try {
+        setLoading(true);
+        const response = await axios.get(`${API_URL}/members`);
+        setMembers(Array.isArray(response.data) ? response.data : []);
+      } catch (error) {
+        console.error('성도 목록 조회 오류:', error);
+        // 에러가 발생해도 계속 진행
+      } finally {
+        setLoading(false);
+      }
+      
       setShowForm(false); // 저장 후 폼 숨기기
     } catch (error) {
       if (axios.isCancel(error)) return; // 요청 취소는 무시
       console.error('성도 저장 오류:', error);
-      const errorMessage = error.response?.data?.message || error.message || '저장에 실패했습니다.';
-      alert(errorMessage);
+      console.error('에러 응답:', error.response);
+      console.error('에러 데이터:', error.response?.data);
+      const errorMessage = error.response?.data?.error || 
+                           error.response?.data?.message || 
+                           error.message || 
+                           '저장에 실패했습니다.';
+      alert(`저장 실패: ${errorMessage}`);
     }
   };
 
@@ -414,6 +440,21 @@ function MemberManagement() {
       stay_period: member.stay_period || '',
       specialty: member.specialty || '',
       service_history: member.service_history || '',
+      active: member.active !== undefined ? member.active : true,
+      visit_dates: (() => {
+        if (!member.visit_dates) return [];
+        if (Array.isArray(member.visit_dates)) return member.visit_dates;
+        if (typeof member.visit_dates === 'string') {
+          try {
+            const parsed = JSON.parse(member.visit_dates);
+            return Array.isArray(parsed) ? parsed : [];
+          } catch {
+            return [];
+          }
+        }
+        return [];
+      })(),
+      notes: member.notes || '',
       office_ids: member.offices ? member.offices.map(o => o.id) : [],
       family_ids: member.families ? member.families.map(f => f.id) : [],
       party_ids: member.parties ? member.parties.map(p => p.id) : [],
@@ -445,6 +486,7 @@ function MemberManagement() {
       baptism_church: '', baptism_year: '', baptism_pastor: '', education: '',
       career: '', faith_life: '', marriage_anniversary: '', stay_period: '',
       specialty: '', service_history: '',
+      active: true, visit_dates: [], notes: '',
       office_ids: [], family_ids: [], party_ids: [], department_ids: []
     });
     setEditingId(null);
@@ -612,7 +654,7 @@ function MemberManagement() {
                 <input type="text" name="baptism_pastor" value={formData.baptism_pastor} onChange={handleInputChange} />
               </div>
             </div>
-            <div className="form-row form-row-4">
+            <div className="form-row form-row-5">
               <div className="form-group">
                 <label>섬기던교회</label>
                 <input type="text" name="previous_church" value={formData.previous_church} onChange={handleInputChange} />
@@ -628,6 +670,94 @@ function MemberManagement() {
               <div className="form-group">
                 <label>신앙세대주</label>
                 <input type="text" name="faith_head" value={formData.faith_head} onChange={handleInputChange} />
+              </div>
+              <div className="form-group">
+                <label>심방날짜</label>
+                <div style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'flex-end', flexDirection: 'column' }}>
+                  <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
+                    <input
+                      type="date"
+                      id="new-visit-date"
+                      style={{ flex: 1 }}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const input = e.target;
+                          const dateValue = input.value;
+                          if (dateValue) {
+                            if (formData.visit_dates.includes(dateValue)) {
+                              alert('이미 등록된 날짜입니다.');
+                              return;
+                            }
+                            setFormData(prev => ({
+                              ...prev,
+                              visit_dates: [...(prev.visit_dates || []), dateValue].sort().reverse()
+                            }));
+                            input.value = '';
+                          }
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        const input = document.getElementById('new-visit-date');
+                        const dateValue = input.value;
+                        if (dateValue) {
+                          if (formData.visit_dates.includes(dateValue)) {
+                            alert('이미 등록된 날짜입니다.');
+                            return;
+                          }
+                          setFormData(prev => ({
+                            ...prev,
+                            visit_dates: [...(prev.visit_dates || []), dateValue].sort().reverse()
+                          }));
+                          input.value = '';
+                        }
+                      }}
+                      style={{ whiteSpace: 'nowrap', padding: '8px 16px' }}
+                    >
+                      추가
+                    </button>
+                  </div>
+                  {formData.visit_dates && formData.visit_dates.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', width: '100%' }}>
+                      {formData.visit_dates.map((date, index) => (
+                        <span key={index} style={{ 
+                          display: 'inline-flex', 
+                          alignItems: 'center', 
+                          padding: '4px 8px', 
+                          backgroundColor: '#e3f2fd', 
+                          borderRadius: '4px',
+                          fontSize: '14px'
+                        }}>
+                          {date}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFormData(prev => ({
+                                ...prev,
+                                visit_dates: prev.visit_dates.filter((_, i) => i !== index)
+                              }));
+                            }}
+                            style={{
+                              marginLeft: '8px',
+                              background: 'none',
+                              border: 'none',
+                              color: '#666',
+                              cursor: 'pointer',
+                              fontSize: '18px',
+                              lineHeight: '1'
+                            }}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -802,6 +932,42 @@ function MemberManagement() {
                     ))}
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 기타 정보 */}
+          <div className="form-subsection">
+            <h3>기타 정보</h3>
+            <div className="form-row form-row-1">
+              <div className="form-group">
+                <label>활성 여부</label>
+                <div className="checkbox-container">
+                  <input
+                    type="checkbox"
+                    name="active"
+                    checked={formData.active}
+                    onChange={(e) => setFormData(prev => ({ ...prev, active: e.target.checked }))}
+                    className="checkbox-large"
+                    id="active"
+                  />
+                  <label htmlFor="active" className="checkbox-label-large">
+                    {formData.active ? '활성' : '비활성'}
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div className="form-row form-row-1">
+              <div className="form-group">
+                <label>특이사항</label>
+                <textarea
+                  name="notes"
+                  value={formData.notes}
+                  onChange={handleInputChange}
+                  rows="4"
+                  placeholder="특이사항을 입력하세요..."
+                  style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                />
               </div>
             </div>
           </div>
