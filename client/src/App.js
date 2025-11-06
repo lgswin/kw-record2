@@ -41,6 +41,12 @@ function App() {
         >
           부서 관리
         </button>
+        <button 
+          className={activeTab === 'organizations' ? 'nav-tab active' : 'nav-tab'}
+          onClick={() => setActiveTab('organizations')}
+        >
+          조직 관리
+        </button>
       </nav>
 
       <main className="container">
@@ -48,6 +54,7 @@ function App() {
         {activeTab === 'families' && <FamilyManagement />}
         {activeTab === 'parties' && <PartyManagement />}
         {activeTab === 'departments' && <DepartmentManagement />}
+        {activeTab === 'organizations' && <OrganizationManagement />}
       </main>
     </div>
   );
@@ -2155,6 +2162,9 @@ function DepartmentManagement() {
     setPositionSearchInputs({ president: '', vice_president: '', secretary: '', treasurer: '', clerk: '' });
     setShowPositionDropdowns({ president: false, vice_president: false, secretary: false, treasurer: false, clerk: false });
     
+    // 폼이 숨겨져 있으면 표시
+    setShowForm(true);
+    
     // 폼 섹션으로 스크롤 이동
     setTimeout(() => {
       const formSection = document.querySelector('.form-section');
@@ -2660,6 +2670,452 @@ function DepartmentManagement() {
                      clerkName.includes(keyword) ||
                      members.includes(keyword);
             }).length}개 / 전체 {departments.length}개
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+// 조직 관리 컴포넌트
+function OrganizationManagement() {
+  const [organizations, setOrganizations] = useState([]);
+  const [members, setMembers] = useState([]);
+  const [formData, setFormData] = useState({
+    member_id: '',
+    position: '',
+    responsibility: '',
+    appointment_date: '',
+    active: true,
+    notes: ''
+  });
+  const [editingId, setEditingId] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [memberSearchInput, setMemberSearchInput] = useState('');
+  const [showMemberDropdown, setShowMemberDropdown] = useState(false);
+  const [organizationSearchKeyword, setOrganizationSearchKeyword] = useState('');
+
+  useEffect(() => {
+    fetchOrganizations();
+    fetchMembers();
+  }, []);
+
+  // 외부 클릭 시 드롭다운 닫기
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!event.target.closest('.autocomplete-container')) {
+        setShowMemberDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const fetchOrganizations = async () => {
+    try {
+      setLoading(true);
+      const response = await axios.get(`${API_URL}/organizations`);
+      setOrganizations(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.error('조직 구성원 목록 조회 오류:', error);
+      alert('조직 구성원 목록을 가져올 수 없습니다.');
+      setOrganizations([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchMembers = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/members`);
+      setMembers(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.error('성도 목록 조회 오류:', error);
+      setMembers([]);
+    }
+  };
+
+  const handleInputChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  };
+
+  const handleMemberSearchInput = (value) => {
+    setMemberSearchInput(value);
+    setShowMemberDropdown(value.length > 0);
+  };
+
+  const handleSelectMember = (member) => {
+    setFormData(prev => ({
+      ...prev,
+      member_id: member.id
+    }));
+    setMemberSearchInput('');
+    setShowMemberDropdown(false);
+  };
+
+  const handleRemoveMember = () => {
+    setFormData(prev => ({
+      ...prev,
+      member_id: ''
+    }));
+    setMemberSearchInput('');
+  };
+
+  const getFilteredMembers = () => {
+    if (!memberSearchInput.trim()) return [];
+    const keyword = memberSearchInput.toLowerCase();
+    
+    return (Array.isArray(members) ? members : []).filter(member => {
+      const name = (member.name || '').toLowerCase();
+      const phone = (member.phone || '').toLowerCase();
+      return (name.includes(keyword) || phone.includes(keyword)) && member.id !== formData.member_id;
+    });
+  };
+
+  const getSelectedMember = () => {
+    if (!formData.member_id) return null;
+    return (Array.isArray(members) ? members : []).find(member => member.id === formData.member_id);
+  };
+
+  const handleNewOrganization = () => {
+    setFormData({
+      member_id: '',
+      position: '',
+      responsibility: '',
+      appointment_date: '',
+      active: true,
+      notes: ''
+    });
+    setMemberSearchInput('');
+    setShowMemberDropdown(false);
+    setEditingId(null);
+    setShowForm(true);
+    
+    // 폼 섹션으로 스크롤 이동
+    setTimeout(() => {
+      const formSection = document.querySelector('.form-section');
+      if (formSection) {
+        formSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
+  };
+
+  const handleEdit = (organization) => {
+    setEditingId(organization.id);
+    setFormData({
+      member_id: organization.member_id || '',
+      position: organization.position || '',
+      responsibility: organization.responsibility || '',
+      appointment_date: organization.appointment_date || '',
+      active: organization.active !== undefined ? organization.active : true,
+      notes: organization.notes || ''
+    });
+    setMemberSearchInput('');
+    setShowMemberDropdown(false);
+    
+    // 폼이 숨겨져 있으면 표시
+    setShowForm(true);
+    
+    // 폼 섹션으로 스크롤 이동
+    setTimeout(() => {
+      const formSection = document.querySelector('.form-section');
+      if (formSection) {
+        formSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setFormData({
+      member_id: '',
+      position: '',
+      responsibility: '',
+      appointment_date: '',
+      active: true,
+      notes: ''
+    });
+    setMemberSearchInput('');
+    setShowMemberDropdown(false);
+    setShowForm(false);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!formData.position.trim()) {
+      alert('직책을 입력해주세요.');
+      return;
+    }
+
+    try {
+      if (editingId) {
+        await axios.put(`${API_URL}/organizations/${editingId}`, formData);
+        alert('조직 구성원 정보가 수정되었습니다.');
+      } else {
+        await axios.post(`${API_URL}/organizations`, formData);
+        alert('조직 구성원이 등록되었습니다.');
+      }
+      setFormData({
+        member_id: '',
+        position: '',
+        responsibility: '',
+        appointment_date: '',
+        active: true,
+        notes: ''
+      });
+      setMemberSearchInput('');
+      setShowMemberDropdown(false);
+      setEditingId(null);
+      fetchOrganizations();
+      setShowForm(false);
+    } catch (error) {
+      console.error(editingId ? '조직 구성원 수정 오류:' : '조직 구성원 등록 오류:', error);
+      alert(editingId ? '수정에 실패했습니다.' : '등록에 실패했습니다.');
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('정말로 이 조직 구성원을 삭제하시겠습니까?')) return;
+    try {
+      await axios.delete(`${API_URL}/organizations/${id}`);
+      alert('조직 구성원이 삭제되었습니다.');
+      fetchOrganizations();
+    } catch (error) {
+      console.error('조직 구성원 삭제 오류:', error);
+      alert('삭제에 실패했습니다.');
+    }
+  };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', marginBottom: '20px' }}>
+        <button 
+          type="button"
+          onClick={handleNewOrganization}
+          className="btn btn-primary"
+          style={{ fontSize: '18px', padding: '12px 24px', fontWeight: '600' }}
+        >
+          새 조직 구성원 등록
+        </button>
+        {showForm && (
+          <button 
+            type="button"
+            onClick={() => setShowForm(false)}
+            className="btn btn-secondary"
+            style={{ minWidth: '100px' }}
+          >
+            숨기기
+          </button>
+        )}
+      </div>
+      {showForm && (
+      <section className="form-section">
+        <form onSubmit={handleSubmit} className="member-form">
+          <div className="form-subsection">
+            <h3>기본 정보</h3>
+            <div className="form-row form-row-4">
+              <div className="form-group">
+                <label>직책 *</label>
+                <input
+                  type="text"
+                  name="position"
+                  value={formData.position}
+                  onChange={handleInputChange}
+                  placeholder="직책을 입력하세요"
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>담당부서</label>
+                <input type="text" name="responsibility" value={formData.responsibility} onChange={handleInputChange} />
+              </div>
+              <div className="form-group">
+                <label>성도 선택</label>
+                <div className="autocomplete-container">
+                  <input
+                    type="text"
+                    placeholder="성도 이름 또는 전화번호로 검색..."
+                    value={memberSearchInput}
+                    onChange={(e) => handleMemberSearchInput(e.target.value)}
+                    onFocus={() => memberSearchInput && setShowMemberDropdown(true)}
+                    className="autocomplete-input"
+                  />
+                  {showMemberDropdown && getFilteredMembers().length > 0 && (
+                    <div className="autocomplete-dropdown">
+                      {getFilteredMembers().map(member => (
+                        <div
+                          key={member.id}
+                          className="autocomplete-item"
+                          onClick={() => handleSelectMember(member)}
+                        >
+                          {member.name} ({member.phone})
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {getSelectedMember() && (
+                    <div className="selected-tags" style={{ marginTop: '10px' }}>
+                      <span className="tag">
+                        {getSelectedMember().name} ({getSelectedMember().phone})
+                        <button
+                          type="button"
+                          className="tag-remove"
+                          onClick={handleRemoveMember}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="form-group">
+                <label>임명날짜</label>
+                <input type="date" name="appointment_date" value={formData.appointment_date} onChange={handleInputChange} />
+              </div>
+            </div>
+            <div className="form-row form-row-1">
+              <div className="form-group">
+                <label>특이사항</label>
+                <textarea
+                  name="notes"
+                  value={formData.notes}
+                  onChange={handleInputChange}
+                  rows="4"
+                  placeholder="특이사항을 입력하세요..."
+                  style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                />
+              </div>
+            </div>
+            <div className="form-row form-row-1">
+              <div className="form-group">
+                <div className="checkbox-container">
+                  <input
+                    type="checkbox"
+                    name="active"
+                    checked={formData.active}
+                    onChange={handleInputChange}
+                    className="checkbox-large"
+                    id="org-active"
+                  />
+                  <label htmlFor="org-active" className="checkbox-label-large">
+                    {formData.active ? '활성' : '비활성'}
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="form-actions">
+            <button type="submit" className="btn btn-primary">{editingId ? '수정' : '등록'}</button>
+            {editingId && (
+              <>
+                <button type="button" onClick={handleCancelEdit} className="btn btn-secondary">취소</button>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    if (window.confirm('정말로 이 조직 구성원을 삭제하시겠습니까?')) {
+                      handleDelete(editingId);
+                    }
+                  }} 
+                  className="btn btn-delete"
+                >
+                  삭제
+                </button>
+              </>
+            )}
+          </div>
+        </form>
+      </section>
+      )}
+
+      <section className="list-section">
+        <div className="list-header">
+          <h2>조직 구성원 목록</h2>
+          <div className="search-container">
+            <input
+              type="text"
+              placeholder="직책, 이름, 담당부서로 검색..."
+              value={organizationSearchKeyword}
+              onChange={(e) => setOrganizationSearchKeyword(e.target.value)}
+              className="search-input"
+            />
+          </div>
+        </div>
+        {(() => {
+          const filteredOrganizations = organizations.filter(org => {
+            if (!organizationSearchKeyword.trim()) return true;
+            const keyword = organizationSearchKeyword.toLowerCase();
+            const position = (org.position || '').toLowerCase();
+            const memberName = (org.member_name || '').toLowerCase();
+            const responsibility = (org.responsibility || '').toLowerCase();
+            
+            return position.includes(keyword) || 
+                   memberName.includes(keyword) || 
+                   responsibility.includes(keyword);
+          });
+
+          if (loading) {
+            return <p>로딩 중...</p>;
+          } else if (filteredOrganizations.length === 0) {
+            return <p>{organizationSearchKeyword ? '검색 결과가 없습니다.' : '등록된 조직 구성원이 없습니다.'}</p>;
+          } else {
+            return (
+              <div className="members-table-container">
+                <table className="members-table">
+                  <thead>
+                    <tr>
+                      <th>직책</th>
+                      <th>이름</th>
+                      <th>전화번호</th>
+                      <th>담당부서/업무</th>
+                      <th>임명날짜</th>
+                      <th>활성</th>
+                      <th>등록일</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredOrganizations.map(org => (
+                      <tr 
+                        key={org.id}
+                        onClick={() => handleEdit(org)}
+                        className="member-row-clickable"
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <td>{org.position}</td>
+                        <td>{org.member_name || '-'}</td>
+                        <td>{org.member_phone || '-'}</td>
+                        <td>{org.responsibility || '-'}</td>
+                        <td>{org.appointment_date ? new Date(org.appointment_date).toLocaleDateString() : '-'}</td>
+                        <td>{org.active ? '활성' : '비활성'}</td>
+                        <td>{new Date(org.created_at).toLocaleDateString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          }
+        })()}
+        {organizationSearchKeyword && (
+          <div className="search-result-info">
+            검색 결과: {organizations.filter(org => {
+              const keyword = organizationSearchKeyword.toLowerCase();
+              const position = (org.position || '').toLowerCase();
+              const memberName = (org.member_name || '').toLowerCase();
+              const responsibility = (org.responsibility || '').toLowerCase();
+              return position.includes(keyword) || 
+                     memberName.includes(keyword) || 
+                     responsibility.includes(keyword);
+            }).length}명 / 전체 {organizations.length}명
           </div>
         )}
       </section>

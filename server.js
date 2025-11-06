@@ -787,6 +787,143 @@ app.delete('/api/departments/:id', async (req, res) => {
   }
 });
 
+// ==================== 조직 API ====================
+// 모든 조직 구성원 조회
+app.get('/api/organizations', async (req, res) => {
+  try {
+    const [rows] = await pool.execute(`
+      SELECT o.*, 
+        m.name as member_name,
+        m.phone as member_phone
+      FROM organizations o
+      LEFT JOIN members m ON o.member_id = m.id
+      ORDER BY o.position, o.appointment_date DESC
+    `);
+    res.json(rows);
+  } catch (error) {
+    console.error('조직 구성원 목록 조회 오류:', error);
+    res.status(500).json({ error: '조직 구성원 목록을 가져올 수 없습니다.' });
+  }
+});
+
+// 특정 조직 구성원 조회
+app.get('/api/organizations/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [rows] = await pool.execute(`
+      SELECT o.*, 
+        m.name as member_name,
+        m.phone as member_phone
+      FROM organizations o
+      LEFT JOIN members m ON o.member_id = m.id
+      WHERE o.id = ?
+    `, [id]);
+    
+    if (rows.length === 0) {
+      return res.status(404).json({ error: '조직 구성원을 찾을 수 없습니다.' });
+    }
+    
+    res.json(rows[0]);
+  } catch (error) {
+    console.error('조직 구성원 조회 오류:', error);
+    res.status(500).json({ error: '조직 구성원 정보를 가져올 수 없습니다.' });
+  }
+});
+
+// 새 조직 구성원 추가
+app.post('/api/organizations', async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    
+    const { member_id, position, responsibility, appointment_date, active, notes } = req.body;
+    
+    if (!position) {
+      await connection.rollback();
+      return res.status(400).json({ error: '직책은 필수입니다.' });
+    }
+
+    const [result] = await connection.execute(
+      `INSERT INTO organizations (member_id, position, responsibility, appointment_date, active, notes)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [member_id || null, position, responsibility || null, appointment_date || null, active !== undefined ? active : true, notes || null]
+    );
+    
+    await connection.commit();
+    
+    res.status(201).json({ 
+      id: result.insertId, 
+      position,
+      message: '조직 구성원이 성공적으로 추가되었습니다.' 
+    });
+  } catch (error) {
+    await connection.rollback();
+    console.error('조직 구성원 추가 오류:', error);
+    res.status(500).json({ error: '조직 구성원 추가에 실패했습니다.' });
+  } finally {
+    connection.release();
+  }
+});
+
+// 조직 구성원 정보 수정
+app.put('/api/organizations/:id', async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    
+    const { id } = req.params;
+    const { member_id, position, responsibility, appointment_date, active, notes } = req.body;
+    
+    if (!position) {
+      await connection.rollback();
+      return res.status(400).json({ error: '직책은 필수입니다.' });
+    }
+
+    const [result] = await connection.execute(
+      `UPDATE organizations SET member_id = ?, position = ?, responsibility = ?, 
+       appointment_date = ?, active = ?, notes = ? WHERE id = ?`,
+      [member_id || null, position, responsibility || null, appointment_date || null, 
+       active !== undefined ? active : true, notes || null, id]
+    );
+    
+    if (result.affectedRows === 0) {
+      await connection.rollback();
+      return res.status(404).json({ error: '조직 구성원을 찾을 수 없습니다.' });
+    }
+    
+    await connection.commit();
+    
+    res.json({ 
+      id: parseInt(id), 
+      position,
+      message: '조직 구성원 정보가 성공적으로 수정되었습니다.' 
+    });
+  } catch (error) {
+    await connection.rollback();
+    console.error('조직 구성원 수정 오류:', error);
+    res.status(500).json({ error: '조직 구성원 정보 수정에 실패했습니다.' });
+  } finally {
+    connection.release();
+  }
+});
+
+// 조직 구성원 삭제
+app.delete('/api/organizations/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [result] = await pool.execute('DELETE FROM organizations WHERE id = ?', [id]);
+    
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: '조직 구성원을 찾을 수 없습니다.' });
+    }
+    
+    res.json({ message: '조직 구성원이 성공적으로 삭제되었습니다.' });
+  } catch (error) {
+    console.error('조직 구성원 삭제 오류:', error);
+    res.status(500).json({ error: '조직 구성원 삭제에 실패했습니다.' });
+  }
+});
+
 // ==================== 직분 API ====================
 // 모든 직분 조회
 app.get('/api/offices', async (req, res) => {
