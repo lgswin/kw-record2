@@ -476,11 +476,38 @@ function MemberManagement() {
     }, 100);
   };
 
+  const handleNewMember = () => {
+    setFormData({
+      name: '', phone: '', address: '', gender: '',
+      birth_date: '', baptized_type: '', baptism_date: '', registration_date: '',
+      dismissal_date: '', deceased: false, faith_head: '', english_name: '',
+      infant_baptism: false, email: '', occupation: '', work_phone: '',
+      residence_start_date: '', previous_address: '', previous_church: '', previous_office: '',
+      baptism_church: '', baptism_year: '', baptism_pastor: '', education: '',
+      career: '', faith_life: '', marriage_anniversary: '', stay_period: '',
+      specialty: '', service_history: '',
+      active: true, visit_dates: [], notes: '',
+      office_ids: [], family_ids: [], party_ids: [], department_ids: []
+    });
+    setEditingId(null);
+    setSearchInputs({ office: '', family: '', party: '', department: '' });
+    setShowDropdowns({ office: false, family: false, party: false, department: false });
+    setShowForm(true);
+    
+    // 폼 섹션으로 스크롤 이동
+    setTimeout(() => {
+      const formSection = document.querySelector('.form-section');
+      if (formSection) {
+        formSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
+  };
+
   const handleCancelEdit = () => {
     setFormData({
       name: '', phone: '', address: '', gender: '',
       birth_date: '', baptized_type: '', baptism_date: '', registration_date: '',
-      dismissal_date: '', deceased: false, faith_head: false, english_name: '',
+      dismissal_date: '', deceased: false, faith_head: '', english_name: '',
       infant_baptism: false, email: '', occupation: '', work_phone: '',
       residence_start_date: '', previous_address: '', previous_church: '', previous_office: '',
       baptism_church: '', baptism_year: '', baptism_pastor: '', education: '',
@@ -512,15 +539,24 @@ function MemberManagement() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', marginBottom: '20px' }}>
-        <h2 style={{ margin: 0 }}>{editingId ? '성도 정보 수정' : '새 성도 등록'}</h2>
         <button 
           type="button"
-          onClick={() => setShowForm(prev => !prev)}
-          className="btn btn-secondary"
-          style={{ minWidth: '100px' }}
+          onClick={handleNewMember}
+          className="btn btn-primary"
+          style={{ fontSize: '18px', padding: '12px 24px', fontWeight: '600' }}
         >
-          {showForm ? '숨기기' : '보이기'}
+          새 성도 등록
         </button>
+        {showForm && (
+          <button 
+            type="button"
+            onClick={() => setShowForm(false)}
+            className="btn btn-secondary"
+            style={{ minWidth: '100px' }}
+          >
+            숨기기
+          </button>
+        )}
       </div>
       {showForm && (
       <section className="form-section">
@@ -974,7 +1010,22 @@ function MemberManagement() {
 
           <div className="form-actions">
             <button type="submit" className="btn btn-primary">{editingId ? '수정' : '등록'}</button>
-            {editingId && <button type="button" onClick={handleCancelEdit} className="btn btn-secondary">취소</button>}
+            {editingId && (
+              <>
+                <button type="button" onClick={handleCancelEdit} className="btn btn-secondary">취소</button>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    if (window.confirm('정말로 이 성도를 삭제하시겠습니까?')) {
+                      handleDelete(editingId);
+                    }
+                  }} 
+                  className="btn btn-delete"
+                >
+                  삭제
+                </button>
+              </>
+            )}
           </div>
         </form>
       </section>
@@ -1034,7 +1085,6 @@ function MemberManagement() {
                       <th>순모임</th>
                       <th>부서</th>
                       <th>등록일</th>
-                      <th>작업</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1055,12 +1105,6 @@ function MemberManagement() {
                         <td>{member.parties && member.parties.length > 0 ? member.parties.map(p => p.party_name).join(', ') : '-'}</td>
                         <td>{member.departments && member.departments.length > 0 ? member.departments.map(d => d.department_name).join(', ') : '-'}</td>
                         <td>{new Date(member.created_at).toLocaleDateString()}</td>
-                        <td onClick={(e) => e.stopPropagation()}>
-                          <div className="member-actions">
-                            <button onClick={() => handleEdit(member)} className="btn btn-edit">수정</button>
-                            <button onClick={() => handleDelete(member.id)} className="btn btn-delete">삭제</button>
-                          </div>
-                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -1217,6 +1261,22 @@ function FamilyManagement() {
     }, 100);
   };
 
+  const handleNewFamily = () => {
+    setFormData({ family_name: '', member_ids: [] });
+    setMemberSearchInput('');
+    setShowMemberDropdown(false);
+    setEditingId(null);
+    setShowForm(true);
+    
+    // 폼 섹션으로 스크롤 이동
+    setTimeout(() => {
+      const formSection = document.querySelector('.form-section');
+      if (formSection) {
+        formSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
+  };
+
   const handleCancelEdit = () => {
     setEditingId(null);
     setFormData({ family_name: '', member_ids: [] });
@@ -1267,15 +1327,24 @@ function FamilyManagement() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', marginBottom: '20px' }}>
-        <h2 style={{ margin: 0 }}>{editingId ? '가족 정보 수정' : '새 가족 등록'}</h2>
         <button 
           type="button"
-          onClick={() => setShowForm(prev => !prev)}
-          className="btn btn-secondary"
-          style={{ minWidth: '100px' }}
+          onClick={handleNewFamily}
+          className="btn btn-primary"
+          style={{ fontSize: '18px', padding: '12px 24px', fontWeight: '600' }}
         >
-          {showForm ? '숨기기' : '보이기'}
+          새 가족 등록
         </button>
+        {showForm && (
+          <button 
+            type="button"
+            onClick={() => setShowForm(false)}
+            className="btn btn-secondary"
+            style={{ minWidth: '100px' }}
+          >
+            숨기기
+          </button>
+        )}
       </div>
       {showForm && (
       <section className="form-section">
@@ -1326,7 +1395,22 @@ function FamilyManagement() {
           </div>
           <div className="form-actions">
             <button type="submit" className="btn btn-primary">{editingId ? '수정' : '등록'}</button>
-            {editingId && <button type="button" onClick={handleCancelEdit} className="btn btn-secondary">취소</button>}
+            {editingId && (
+              <>
+                <button type="button" onClick={handleCancelEdit} className="btn btn-secondary">취소</button>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    if (window.confirm('정말로 이 가족을 삭제하시겠습니까?')) {
+                      handleDelete(editingId);
+                    }
+                  }} 
+                  className="btn btn-delete"
+                >
+                  삭제
+                </button>
+              </>
+            )}
           </div>
         </form>
       </section>
@@ -1368,7 +1452,6 @@ function FamilyManagement() {
                       <th>가족명</th>
                       <th>구성원</th>
                       <th>등록일</th>
-                      <th>작업</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1382,12 +1465,6 @@ function FamilyManagement() {
                         <td>{family.family_name}</td>
                         <td>{family.members || '-'}</td>
                         <td>{new Date(family.created_at).toLocaleDateString()}</td>
-                        <td onClick={(e) => e.stopPropagation()}>
-                          <div className="member-actions">
-                            <button onClick={() => handleEdit(family)} className="btn btn-edit">수정</button>
-                            <button onClick={() => handleDelete(family.id)} className="btn btn-delete">삭제</button>
-                          </div>
-                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -1419,6 +1496,8 @@ function PartyManagement() {
   const [loading, setLoading] = useState(false);
   const [memberSearchInput, setMemberSearchInput] = useState('');
   const [showMemberDropdown, setShowMemberDropdown] = useState(false);
+  const [leaderSearchInput, setLeaderSearchInput] = useState('');
+  const [showLeaderDropdown, setShowLeaderDropdown] = useState(false);
   const [partySearchKeyword, setPartySearchKeyword] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [showForm, setShowForm] = useState(false); // 폼 표시 여부 (초기값: 숨김)
@@ -1433,6 +1512,7 @@ function PartyManagement() {
     const handleClickOutside = (event) => {
       if (!event.target.closest('.autocomplete-container')) {
         setShowMemberDropdown(false);
+        setShowLeaderDropdown(false);
       }
     };
 
@@ -1514,6 +1594,44 @@ function PartyManagement() {
     return (Array.isArray(members) ? members : []).filter(member => selectedIds.includes(member.id));
   };
 
+  const handleLeaderSearchInput = (value) => {
+    setLeaderSearchInput(value);
+    setShowLeaderDropdown(value.length > 0);
+  };
+
+  const handleSelectLeader = (member) => {
+    setFormData(prev => ({
+      ...prev,
+      leader_id: member.id
+    }));
+    setLeaderSearchInput('');
+    setShowLeaderDropdown(false);
+  };
+
+  const handleRemoveLeader = () => {
+    setFormData(prev => ({
+      ...prev,
+      leader_id: ''
+    }));
+    setLeaderSearchInput('');
+  };
+
+  const getFilteredLeaders = () => {
+    if (!leaderSearchInput.trim()) return [];
+    const keyword = leaderSearchInput.toLowerCase();
+    
+    return (Array.isArray(members) ? members : []).filter(member => {
+      const name = (member.name || '').toLowerCase();
+      const phone = (member.phone || '').toLowerCase();
+      return (name.includes(keyword) || phone.includes(keyword)) && member.id !== formData.leader_id;
+    });
+  };
+
+  const getSelectedLeader = () => {
+    if (!formData.leader_id) return null;
+    return (Array.isArray(members) ? members : []).find(member => member.id === formData.leader_id);
+  };
+
   const handleEdit = (party) => {
     setEditingId(party.id);
     // members 문자열을 파싱하여 member_ids 추출
@@ -1529,8 +1647,28 @@ function PartyManagement() {
     });
     setMemberSearchInput('');
     setShowMemberDropdown(false);
+    setLeaderSearchInput('');
+    setShowLeaderDropdown(false);
     
     // 폼이 숨겨져 있으면 표시
+    setShowForm(true);
+    
+    // 폼 섹션으로 스크롤 이동
+    setTimeout(() => {
+      const formSection = document.querySelector('.form-section');
+      if (formSection) {
+        formSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
+  };
+
+  const handleNewParty = () => {
+    setFormData({ party_name: '', leader_id: '', member_ids: [] });
+    setMemberSearchInput('');
+    setShowMemberDropdown(false);
+    setLeaderSearchInput('');
+    setShowLeaderDropdown(false);
+    setEditingId(null);
     setShowForm(true);
     
     // 폼 섹션으로 스크롤 이동
@@ -1547,6 +1685,8 @@ function PartyManagement() {
     setFormData({ party_name: '', leader_id: '', member_ids: [] });
     setMemberSearchInput('');
     setShowMemberDropdown(false);
+    setLeaderSearchInput('');
+    setShowLeaderDropdown(false);
     setShowForm(false); // 취소 시 폼 숨기기
   };
 
@@ -1568,6 +1708,8 @@ function PartyManagement() {
       setFormData({ party_name: '', leader_id: '', member_ids: [] });
       setMemberSearchInput('');
       setShowMemberDropdown(false);
+      setLeaderSearchInput('');
+      setShowLeaderDropdown(false);
       setEditingId(null);
       fetchParties();
       setShowForm(false); // 저장 후 폼 숨기기
@@ -1592,15 +1734,24 @@ function PartyManagement() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', marginBottom: '20px' }}>
-        <h2 style={{ margin: 0 }}>{editingId ? '순모임 정보 수정' : '새 순모임 등록'}</h2>
         <button 
           type="button"
-          onClick={() => setShowForm(prev => !prev)}
-          className="btn btn-secondary"
-          style={{ minWidth: '100px' }}
+          onClick={handleNewParty}
+          className="btn btn-primary"
+          style={{ fontSize: '18px', padding: '12px 24px', fontWeight: '600' }}
         >
-          {showForm ? '숨기기' : '보이기'}
+          새 순모임 등록
         </button>
+        {showForm && (
+          <button 
+            type="button"
+            onClick={() => setShowForm(false)}
+            className="btn btn-secondary"
+            style={{ minWidth: '100px' }}
+          >
+            숨기기
+          </button>
+        )}
       </div>
       {showForm && (
       <section className="form-section">
@@ -1611,12 +1762,43 @@ function PartyManagement() {
           </div>
           <div className="form-group">
             <label>순장 선택</label>
-            <select name="leader_id" value={formData.leader_id} onChange={handleInputChange}>
-              <option value="">선택 안 함</option>
-              {members.map(member => (
-                <option key={member.id} value={member.id}>{member.name}</option>
-              ))}
-            </select>
+            <div className="autocomplete-container">
+              <input
+                type="text"
+                placeholder="순장 이름 또는 전화번호로 검색..."
+                value={leaderSearchInput}
+                onChange={(e) => handleLeaderSearchInput(e.target.value)}
+                onFocus={() => leaderSearchInput && setShowLeaderDropdown(true)}
+                className="autocomplete-input"
+              />
+              {showLeaderDropdown && getFilteredLeaders().length > 0 && (
+                <div className="autocomplete-dropdown">
+                  {getFilteredLeaders().map(member => (
+                    <div
+                      key={member.id}
+                      className="autocomplete-item"
+                      onClick={() => handleSelectLeader(member)}
+                    >
+                      {member.name} ({member.phone})
+                    </div>
+                  ))}
+                </div>
+              )}
+              {getSelectedLeader() && (
+                <div className="selected-tags" style={{ marginTop: '10px' }}>
+                  <span className="tag">
+                    {getSelectedLeader().name} ({getSelectedLeader().phone})
+                    <button
+                      type="button"
+                      className="tag-remove"
+                      onClick={handleRemoveLeader}
+                    >
+                      ×
+                    </button>
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
           <div className="form-group">
             <label>순원 선택</label>
@@ -1660,7 +1842,22 @@ function PartyManagement() {
           </div>
           <div className="form-actions">
             <button type="submit" className="btn btn-primary">{editingId ? '수정' : '등록'}</button>
-            {editingId && <button type="button" onClick={handleCancelEdit} className="btn btn-secondary">취소</button>}
+            {editingId && (
+              <>
+                <button type="button" onClick={handleCancelEdit} className="btn btn-secondary">취소</button>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    if (window.confirm('정말로 이 순모임을 삭제하시겠습니까?')) {
+                      handleDelete(editingId);
+                    }
+                  }} 
+                  className="btn btn-delete"
+                >
+                  삭제
+                </button>
+              </>
+            )}
           </div>
         </form>
       </section>
@@ -1704,7 +1901,6 @@ function PartyManagement() {
                       <th>순장</th>
                       <th>순원</th>
                       <th>등록일</th>
-                      <th>작업</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1719,12 +1915,6 @@ function PartyManagement() {
                         <td>{party.leader_name || '-'}</td>
                         <td>{party.members || '-'}</td>
                         <td>{new Date(party.created_at).toLocaleDateString()}</td>
-                        <td onClick={(e) => e.stopPropagation()}>
-                          <div className="member-actions">
-                            <button onClick={() => handleEdit(party)} className="btn btn-edit">수정</button>
-                            <button onClick={() => handleDelete(party.id)} className="btn btn-delete">삭제</button>
-                          </div>
-                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -1974,6 +2164,32 @@ function DepartmentManagement() {
     }, 100);
   };
 
+  const handleNewDepartment = () => {
+    setFormData({ 
+      department_name: '', 
+      president_id: '', 
+      vice_president_id: '', 
+      secretary_id: '', 
+      treasurer_id: '', 
+      clerk_id: '', 
+      member_ids: [] 
+    });
+    setMemberSearchInput('');
+    setShowMemberDropdown(false);
+    setPositionSearchInputs({ president: '', vice_president: '', secretary: '', treasurer: '', clerk: '' });
+    setShowPositionDropdowns({ president: false, vice_president: false, secretary: false, treasurer: false, clerk: false });
+    setEditingId(null);
+    setShowForm(true);
+    
+    // 폼 섹션으로 스크롤 이동
+    setTimeout(() => {
+      const formSection = document.querySelector('.form-section');
+      if (formSection) {
+        formSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
+  };
+
   const handleCancelEdit = () => {
     setEditingId(null);
     setFormData({ 
@@ -2043,15 +2259,24 @@ function DepartmentManagement() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', marginBottom: '20px' }}>
-        <h2 style={{ margin: 0 }}>{editingId ? '부서 정보 수정' : '새 부서 등록'}</h2>
         <button 
           type="button"
-          onClick={() => setShowForm(prev => !prev)}
-          className="btn btn-secondary"
-          style={{ minWidth: '100px' }}
+          onClick={handleNewDepartment}
+          className="btn btn-primary"
+          style={{ fontSize: '18px', padding: '12px 24px', fontWeight: '600' }}
         >
-          {showForm ? '숨기기' : '보이기'}
+          새 부서 등록
         </button>
+        {showForm && (
+          <button 
+            type="button"
+            onClick={() => setShowForm(false)}
+            className="btn btn-secondary"
+            style={{ minWidth: '100px' }}
+          >
+            숨기기
+          </button>
+        )}
       </div>
       {showForm && (
       <section className="form-section">
@@ -2317,7 +2542,22 @@ function DepartmentManagement() {
           </div>
           <div className="form-actions">
             <button type="submit" className="btn btn-primary">{editingId ? '수정' : '등록'}</button>
-            {editingId && <button type="button" onClick={handleCancelEdit} className="btn btn-secondary">취소</button>}
+            {editingId && (
+              <>
+                <button type="button" onClick={handleCancelEdit} className="btn btn-secondary">취소</button>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    if (window.confirm('정말로 이 부서를 삭제하시겠습니까?')) {
+                      handleDelete(editingId);
+                    }
+                  }} 
+                  className="btn btn-delete"
+                >
+                  삭제
+                </button>
+              </>
+            )}
           </div>
         </form>
       </section>
@@ -2375,7 +2615,6 @@ function DepartmentManagement() {
                       <th>서기</th>
                       <th>부서원</th>
                       <th>등록일</th>
-                      <th>작업</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2394,12 +2633,6 @@ function DepartmentManagement() {
                         <td>{department.clerk_name || '-'}</td>
                         <td>{department.members || '-'}</td>
                         <td>{new Date(department.created_at).toLocaleDateString()}</td>
-                        <td onClick={(e) => e.stopPropagation()}>
-                          <div className="member-actions">
-                            <button onClick={() => handleEdit(department)} className="btn btn-edit">수정</button>
-                            <button onClick={() => handleDelete(department.id)} className="btn btn-delete">삭제</button>
-                          </div>
-                        </td>
                       </tr>
                     ))}
                   </tbody>
