@@ -89,6 +89,8 @@ function MemberManagement() {
     office: false, family: false, party: false, department: false
   });
   const [searchKeyword, setSearchKeyword] = useState('');
+  const [sortColumn, setSortColumn] = useState(null);
+  const [sortDirection, setSortDirection] = useState('asc'); // 'asc' or 'desc'
 
   useEffect(() => {
     // 컴포넌트가 마운트되었는지 추적
@@ -508,6 +510,59 @@ function MemberManagement() {
         formSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
     }, 100);
+  };
+
+  const handleSort = (column) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  const sortData = (data, column, direction) => {
+    if (!column) return data;
+    
+    return [...data].sort((a, b) => {
+      let aValue = a[column];
+      let bValue = b[column];
+      
+      // 특수 케이스 처리
+      if (column === 'gender') {
+        aValue = aValue === 'M' ? '남성' : aValue === 'F' ? '여성' : '';
+        bValue = bValue === 'M' ? '남성' : bValue === 'F' ? '여성' : '';
+      } else if (column === 'birth_date' || column === 'created_at') {
+        aValue = aValue ? new Date(aValue).getTime() : 0;
+        bValue = bValue ? new Date(bValue).getTime() : 0;
+      } else if (column === 'offices') {
+        aValue = a.offices && a.offices.length > 0 ? a.offices.map(o => o.office_name).join(', ') : '';
+        bValue = b.offices && b.offices.length > 0 ? b.offices.map(o => o.office_name).join(', ') : '';
+      } else if (column === 'families') {
+        aValue = a.families && a.families.length > 0 ? a.families.map(f => f.family_name).join(', ') : '';
+        bValue = b.families && b.families.length > 0 ? b.families.map(f => f.family_name).join(', ') : '';
+      } else if (column === 'parties') {
+        aValue = a.parties && a.parties.length > 0 ? a.parties.map(p => p.party_name).join(', ') : '';
+        bValue = b.parties && b.parties.length > 0 ? b.parties.map(p => p.party_name).join(', ') : '';
+      } else if (column === 'departments') {
+        aValue = a.departments && a.departments.length > 0 ? a.departments.map(d => d.department_name).join(', ') : '';
+        bValue = b.departments && b.departments.length > 0 ? b.departments.map(d => d.department_name).join(', ') : '';
+      }
+      
+      // null/undefined 처리
+      if (aValue == null) aValue = '';
+      if (bValue == null) bValue = '';
+      
+      // 문자열 비교
+      if (typeof aValue === 'string') {
+        aValue = aValue.toLowerCase();
+        bValue = bValue.toLowerCase();
+      }
+      
+      if (aValue < bValue) return direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return direction === 'asc' ? 1 : -1;
+      return 0;
+    });
   };
 
   const handleCancelEdit = () => {
@@ -1077,29 +1132,50 @@ function MemberManagement() {
           } else if (filteredMembers.length === 0) {
             return <p>{searchKeyword ? '검색 결과가 없습니다.' : '등록된 성도가 없습니다.'}</p>;
           } else {
+            const sortedMembers = sortData(filteredMembers, sortColumn, sortDirection);
             return (
               <div className="members-table-container">
                 <table className="members-table">
                   <thead>
                     <tr>
-                      <th>이름</th>
-                      <th>전화번호</th>
-                      <th>주소</th>
-                      <th>성별</th>
-                      <th>생년월일</th>
-                      <th>직분</th>
-                      <th>가족</th>
-                      <th>순모임</th>
-                      <th>부서</th>
-                      <th>등록일</th>
+                      <th onClick={() => handleSort('name')} className="sortable-header">
+                        이름 {sortColumn === 'name' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th onClick={() => handleSort('phone')} className="sortable-header">
+                        전화번호 {sortColumn === 'phone' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th onClick={() => handleSort('address')} className="sortable-header">
+                        주소 {sortColumn === 'address' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th onClick={() => handleSort('gender')} className="sortable-header">
+                        성별 {sortColumn === 'gender' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th onClick={() => handleSort('birth_date')} className="sortable-header">
+                        생년월일 {sortColumn === 'birth_date' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th onClick={() => handleSort('offices')} className="sortable-header">
+                        직분 {sortColumn === 'offices' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th onClick={() => handleSort('families')} className="sortable-header">
+                        가족 {sortColumn === 'families' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th onClick={() => handleSort('parties')} className="sortable-header">
+                        순모임 {sortColumn === 'parties' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th onClick={() => handleSort('departments')} className="sortable-header">
+                        부서 {sortColumn === 'departments' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th onClick={() => handleSort('created_at')} className="sortable-header">
+                        등록일 {sortColumn === 'created_at' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredMembers.map(member => (
+                    {sortedMembers.map(member => (
                       <tr 
                         key={member.id}
                         onClick={() => handleEdit(member)}
-                        className="member-row-clickable"
+                        className={`member-row-clickable ${member.active === false ? 'inactive-row' : ''}`}
                         style={{ cursor: 'pointer' }}
                       >
                         <td>{member.name}</td>
@@ -1152,6 +1228,8 @@ function FamilyManagement() {
   const [familySearchKeyword, setFamilySearchKeyword] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [showForm, setShowForm] = useState(false); // 폼 표시 여부 (초기값: 숨김)
+  const [sortColumn, setSortColumn] = useState(null);
+  const [sortDirection, setSortDirection] = useState('asc');
 
   useEffect(() => {
     fetchFamilies();
@@ -1242,6 +1320,41 @@ function FamilyManagement() {
   const getSelectedMembers = () => {
     const selectedIds = formData.member_ids || [];
     return (Array.isArray(members) ? members : []).filter(member => selectedIds.includes(member.id));
+  };
+
+  const handleSort = (column) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  const sortData = (data, column, direction) => {
+    if (!column) return data;
+    
+    return [...data].sort((a, b) => {
+      let aValue = a[column];
+      let bValue = b[column];
+      
+      if (column === 'created_at') {
+        aValue = aValue ? new Date(aValue).getTime() : 0;
+        bValue = bValue ? new Date(bValue).getTime() : 0;
+      }
+      
+      if (aValue == null) aValue = '';
+      if (bValue == null) bValue = '';
+      
+      if (typeof aValue === 'string') {
+        aValue = aValue.toLowerCase();
+        bValue = bValue.toLowerCase();
+      }
+      
+      if (aValue < bValue) return direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return direction === 'asc' ? 1 : -1;
+      return 0;
+    });
   };
 
   const handleEdit = (family) => {
@@ -1451,18 +1564,25 @@ function FamilyManagement() {
           } else if (filteredFamilies.length === 0) {
             return <p>{familySearchKeyword ? '검색 결과가 없습니다.' : '등록된 가족이 없습니다.'}</p>;
           } else {
+            const sortedFamilies = sortData(filteredFamilies, sortColumn, sortDirection);
             return (
               <div className="members-table-container">
                 <table className="members-table">
                   <thead>
                     <tr>
-                      <th>가족명</th>
-                      <th>구성원</th>
-                      <th>등록일</th>
+                      <th onClick={() => handleSort('family_name')} className="sortable-header">
+                        가족명 {sortColumn === 'family_name' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th onClick={() => handleSort('members')} className="sortable-header">
+                        구성원 {sortColumn === 'members' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th onClick={() => handleSort('created_at')} className="sortable-header">
+                        등록일 {sortColumn === 'created_at' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredFamilies.map(family => (
+                    {sortedFamilies.map(family => (
                       <tr 
                         key={family.id}
                         onClick={() => handleEdit(family)}
@@ -1508,6 +1628,8 @@ function PartyManagement() {
   const [partySearchKeyword, setPartySearchKeyword] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [showForm, setShowForm] = useState(false); // 폼 표시 여부 (초기값: 숨김)
+  const [sortColumn, setSortColumn] = useState(null);
+  const [sortDirection, setSortDirection] = useState('asc');
 
   useEffect(() => {
     fetchParties();
@@ -1621,6 +1743,44 @@ function PartyManagement() {
       leader_id: ''
     }));
     setLeaderSearchInput('');
+  };
+
+  const handleSort = (column) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  const sortData = (data, column, direction) => {
+    if (!column) return data;
+    
+    return [...data].sort((a, b) => {
+      let aValue = a[column];
+      let bValue = b[column];
+      
+      if (column === 'leader_name') {
+        aValue = a.leader_name || '';
+        bValue = b.leader_name || '';
+      } else if (column === 'created_at') {
+        aValue = aValue ? new Date(aValue).getTime() : 0;
+        bValue = bValue ? new Date(bValue).getTime() : 0;
+      }
+      
+      if (aValue == null) aValue = '';
+      if (bValue == null) bValue = '';
+      
+      if (typeof aValue === 'string') {
+        aValue = aValue.toLowerCase();
+        bValue = bValue.toLowerCase();
+      }
+      
+      if (aValue < bValue) return direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return direction === 'asc' ? 1 : -1;
+      return 0;
+    });
   };
 
   const getFilteredLeaders = () => {
@@ -1899,19 +2059,28 @@ function PartyManagement() {
           } else if (filteredParties.length === 0) {
             return <p>{partySearchKeyword ? '검색 결과가 없습니다.' : '등록된 순모임이 없습니다.'}</p>;
           } else {
+            const sortedParties = sortData(filteredParties, sortColumn, sortDirection);
             return (
               <div className="members-table-container">
                 <table className="members-table">
                   <thead>
                     <tr>
-                      <th>순모임명</th>
-                      <th>순장</th>
-                      <th>순원</th>
-                      <th>등록일</th>
+                      <th onClick={() => handleSort('party_name')} className="sortable-header">
+                        순모임명 {sortColumn === 'party_name' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th onClick={() => handleSort('leader_name')} className="sortable-header">
+                        순장 {sortColumn === 'leader_name' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th onClick={() => handleSort('members')} className="sortable-header">
+                        순원 {sortColumn === 'members' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th onClick={() => handleSort('created_at')} className="sortable-header">
+                        등록일 {sortColumn === 'created_at' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredParties.map(party => (
+                    {sortedParties.map(party => (
                       <tr 
                         key={party.id}
                         onClick={() => handleEdit(party)}
@@ -1971,6 +2140,8 @@ function DepartmentManagement() {
   });
   const [editingId, setEditingId] = useState(null);
   const [showForm, setShowForm] = useState(false); // 폼 표시 여부 (초기값: 숨김)
+  const [sortColumn, setSortColumn] = useState(null);
+  const [sortDirection, setSortDirection] = useState('asc');
 
   useEffect(() => {
     fetchDepartments();
@@ -2055,6 +2226,41 @@ function DepartmentManagement() {
       const name = (member.name || '').toLowerCase();
       const phone = (member.phone || '').toLowerCase();
       return (name.includes(keyword) || phone.includes(keyword)) && !selectedIds.includes(member.id);
+    });
+  };
+
+  const handleSort = (column) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  const sortData = (data, column, direction) => {
+    if (!column) return data;
+    
+    return [...data].sort((a, b) => {
+      let aValue = a[column];
+      let bValue = b[column];
+      
+      if (column === 'created_at') {
+        aValue = aValue ? new Date(aValue).getTime() : 0;
+        bValue = bValue ? new Date(bValue).getTime() : 0;
+      }
+      
+      if (aValue == null) aValue = '';
+      if (bValue == null) bValue = '';
+      
+      if (typeof aValue === 'string') {
+        aValue = aValue.toLowerCase();
+        bValue = bValue.toLowerCase();
+      }
+      
+      if (aValue < bValue) return direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return direction === 'asc' ? 1 : -1;
+      return 0;
     });
   };
 
@@ -2612,23 +2818,40 @@ function DepartmentManagement() {
           } else if (filteredDepartments.length === 0) {
             return <p>{departmentSearchKeyword ? '검색 결과가 없습니다.' : '등록된 부서가 없습니다.'}</p>;
           } else {
+            const sortedDepartments = sortData(filteredDepartments, sortColumn, sortDirection);
             return (
               <div className="members-table-container">
                 <table className="members-table">
                   <thead>
                     <tr>
-                      <th>부서명</th>
-                      <th>회장</th>
-                      <th>부회장</th>
-                      <th>총무</th>
-                      <th>회계</th>
-                      <th>서기</th>
-                      <th>부서원</th>
-                      <th>등록일</th>
+                      <th onClick={() => handleSort('department_name')} className="sortable-header">
+                        부서명 {sortColumn === 'department_name' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th onClick={() => handleSort('president_name')} className="sortable-header">
+                        회장 {sortColumn === 'president_name' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th onClick={() => handleSort('vice_president_name')} className="sortable-header">
+                        부회장 {sortColumn === 'vice_president_name' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th onClick={() => handleSort('secretary_name')} className="sortable-header">
+                        총무 {sortColumn === 'secretary_name' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th onClick={() => handleSort('treasurer_name')} className="sortable-header">
+                        회계 {sortColumn === 'treasurer_name' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th onClick={() => handleSort('clerk_name')} className="sortable-header">
+                        서기 {sortColumn === 'clerk_name' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th onClick={() => handleSort('members')} className="sortable-header">
+                        부서원 {sortColumn === 'members' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th onClick={() => handleSort('created_at')} className="sortable-header">
+                        등록일 {sortColumn === 'created_at' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredDepartments.map(department => (
+                    {sortedDepartments.map(department => (
                       <tr 
                         key={department.id}
                         onClick={() => handleEdit(department)}
@@ -2695,6 +2918,8 @@ function OrganizationManagement() {
   const [memberSearchInput, setMemberSearchInput] = useState('');
   const [showMemberDropdown, setShowMemberDropdown] = useState(false);
   const [organizationSearchKeyword, setOrganizationSearchKeyword] = useState('');
+  const [sortColumn, setSortColumn] = useState(null);
+  const [sortDirection, setSortDirection] = useState('asc');
 
   useEffect(() => {
     fetchOrganizations();
@@ -2737,6 +2962,44 @@ function OrganizationManagement() {
       console.error('성도 목록 조회 오류:', error);
       setMembers([]);
     }
+  };
+
+  const handleSort = (column) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  const sortData = (data, column, direction) => {
+    if (!column) return data;
+    
+    return [...data].sort((a, b) => {
+      let aValue = a[column];
+      let bValue = b[column];
+      
+      if (column === 'appointment_date' || column === 'created_at') {
+        aValue = aValue ? new Date(aValue).getTime() : 0;
+        bValue = bValue ? new Date(bValue).getTime() : 0;
+      } else if (column === 'active') {
+        aValue = aValue ? 1 : 0;
+        bValue = bValue ? 1 : 0;
+      }
+      
+      if (aValue == null) aValue = '';
+      if (bValue == null) bValue = '';
+      
+      if (typeof aValue === 'string') {
+        aValue = aValue.toLowerCase();
+        bValue = bValue.toLowerCase();
+      }
+      
+      if (aValue < bValue) return direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return direction === 'asc' ? 1 : -1;
+      return 0;
+    });
   };
 
   const handleInputChange = (e) => {
@@ -3068,26 +3331,41 @@ function OrganizationManagement() {
           } else if (filteredOrganizations.length === 0) {
             return <p>{organizationSearchKeyword ? '검색 결과가 없습니다.' : '등록된 조직 구성원이 없습니다.'}</p>;
           } else {
+            const sortedOrganizations = sortData(filteredOrganizations, sortColumn, sortDirection);
             return (
               <div className="members-table-container">
                 <table className="members-table">
                   <thead>
                     <tr>
-                      <th>직책</th>
-                      <th>이름</th>
-                      <th>전화번호</th>
-                      <th>담당부서/업무</th>
-                      <th>임명날짜</th>
-                      <th>활성</th>
-                      <th>등록일</th>
+                      <th onClick={() => handleSort('position')} className="sortable-header">
+                        직책 {sortColumn === 'position' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th onClick={() => handleSort('member_name')} className="sortable-header">
+                        이름 {sortColumn === 'member_name' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th onClick={() => handleSort('member_phone')} className="sortable-header">
+                        전화번호 {sortColumn === 'member_phone' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th onClick={() => handleSort('responsibility')} className="sortable-header">
+                        담당부서/업무 {sortColumn === 'responsibility' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th onClick={() => handleSort('appointment_date')} className="sortable-header">
+                        임명날짜 {sortColumn === 'appointment_date' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th onClick={() => handleSort('active')} className="sortable-header">
+                        활성 {sortColumn === 'active' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
+                      <th onClick={() => handleSort('created_at')} className="sortable-header">
+                        등록일 {sortColumn === 'created_at' && (sortDirection === 'asc' ? '↑' : '↓')}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredOrganizations.map(org => (
+                    {sortedOrganizations.map(org => (
                       <tr 
                         key={org.id}
                         onClick={() => handleEdit(org)}
-                        className="member-row-clickable"
+                        className={`member-row-clickable ${org.active === false ? 'inactive-row' : ''}`}
                         style={{ cursor: 'pointer' }}
                       >
                         <td>{org.position}</td>

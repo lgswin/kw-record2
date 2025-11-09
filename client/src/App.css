@@ -598,6 +598,31 @@
   background-color: #f5f5f5;
 }
 
+.members-table tbody tr.inactive-row {
+  background-color: #e8e8e8;
+  color: #888;
+  opacity: 0.7;
+}
+
+.members-table tbody tr.inactive-row:hover {
+  background-color: #d8d8d8;
+}
+
+.members-table tbody tr.inactive-row td {
+  color: #888;
+}
+
+.members-table th.sortable-header {
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  padding-right: 20px;
+}
+
+.members-table th.sortable-header:hover {
+  background-color: #f0f0f0;
+}
+
 .members-table tbody tr:last-child td {
   border-bottom: none;
 }

@@ -843,10 +843,24 @@ app.post('/api/organizations', async (req, res) => {
       return res.status(400).json({ error: '직책은 필수입니다.' });
     }
 
+    // 날짜 형식 변환 (ISO 형식을 YYYY-MM-DD로 변환)
+    let formattedAppointmentDate = null;
+    if (appointment_date) {
+      try {
+        const date = new Date(appointment_date);
+        if (!isNaN(date.getTime())) {
+          formattedAppointmentDate = date.toISOString().split('T')[0];
+        }
+      } catch (e) {
+        // 날짜 파싱 실패 시 null
+        formattedAppointmentDate = null;
+      }
+    }
+
     const [result] = await connection.execute(
       `INSERT INTO organizations (member_id, position, responsibility, appointment_date, active, notes)
        VALUES (?, ?, ?, ?, ?, ?)`,
-      [member_id || null, position, responsibility || null, appointment_date || null, active !== undefined ? active : true, notes || null]
+      [member_id || null, position, responsibility || null, formattedAppointmentDate, active !== undefined ? active : true, notes || null]
     );
     
     await connection.commit();
@@ -879,10 +893,24 @@ app.put('/api/organizations/:id', async (req, res) => {
       return res.status(400).json({ error: '직책은 필수입니다.' });
     }
 
+    // 날짜 형식 변환 (ISO 형식을 YYYY-MM-DD로 변환)
+    let formattedAppointmentDate = null;
+    if (appointment_date) {
+      try {
+        const date = new Date(appointment_date);
+        if (!isNaN(date.getTime())) {
+          formattedAppointmentDate = date.toISOString().split('T')[0];
+        }
+      } catch (e) {
+        // 날짜 파싱 실패 시 null
+        formattedAppointmentDate = null;
+      }
+    }
+
     const [result] = await connection.execute(
       `UPDATE organizations SET member_id = ?, position = ?, responsibility = ?, 
        appointment_date = ?, active = ?, notes = ? WHERE id = ?`,
-      [member_id || null, position, responsibility || null, appointment_date || null, 
+      [member_id || null, position, responsibility || null, formattedAppointmentDate, 
        active !== undefined ? active : true, notes || null, id]
     );
     
