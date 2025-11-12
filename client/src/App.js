@@ -2121,27 +2121,19 @@ function DepartmentManagement() {
   const [members, setMembers] = useState([]);
   const [formData, setFormData] = useState({ 
     department_name: '', 
-    president_id: '', 
-    vice_president_id: '', 
-    secretary_id: '', 
-    treasurer_id: '', 
-    clerk_id: '', 
-    member_ids: [] 
+    members: [] // [{position_name, member_id}]
   });
   const [loading, setLoading] = useState(false);
-  const [memberSearchInput, setMemberSearchInput] = useState('');
-  const [showMemberDropdown, setShowMemberDropdown] = useState(false);
   const [departmentSearchKeyword, setDepartmentSearchKeyword] = useState('');
-  const [positionSearchInputs, setPositionSearchInputs] = useState({
-    president: '', vice_president: '', secretary: '', treasurer: '', clerk: ''
-  });
-  const [showPositionDropdowns, setShowPositionDropdowns] = useState({
-    president: false, vice_president: false, secretary: false, treasurer: false, clerk: false
-  });
   const [editingId, setEditingId] = useState(null);
   const [showForm, setShowForm] = useState(false); // 폼 표시 여부 (초기값: 숨김)
   const [sortColumn, setSortColumn] = useState(null);
   const [sortDirection, setSortDirection] = useState('asc');
+  
+  // 구성원 추가를 위한 임시 상태
+  const [newMemberPosition, setNewMemberPosition] = useState('');
+  const [newMemberSearchInput, setNewMemberSearchInput] = useState('');
+  const [showNewMemberDropdown, setShowNewMemberDropdown] = useState(false);
 
   useEffect(() => {
     fetchDepartments();
@@ -2152,7 +2144,7 @@ function DepartmentManagement() {
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (!event.target.closest('.autocomplete-container')) {
-        setShowMemberDropdown(false);
+        setShowNewMemberDropdown(false);
       }
     };
 
@@ -2191,42 +2183,50 @@ function DepartmentManagement() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleMemberSearchInput = (value) => {
-    setMemberSearchInput(value);
-    setShowMemberDropdown(value.length > 0);
-  };
-
-  const handleSelectMember = (member) => {
-    setFormData(prev => {
-      if (!prev.member_ids.includes(member.id)) {
-        return {
-          ...prev,
-          member_ids: [...prev.member_ids, member.id]
-        };
-      }
-      return prev;
-    });
-    setMemberSearchInput('');
-    setShowMemberDropdown(false);
-  };
-
-  const handleRemoveMember = (memberId) => {
-    setFormData(prev => ({
-      ...prev,
-      member_ids: prev.member_ids.filter(id => id !== memberId)
-    }));
-  };
-
-  const getFilteredMembers = () => {
-    if (!memberSearchInput.trim()) return [];
-    const keyword = memberSearchInput.toLowerCase();
-    const selectedIds = formData.member_ids || [];
+  const getFilteredMembersForNew = () => {
+    if (!newMemberSearchInput.trim()) return [];
+    const keyword = newMemberSearchInput.toLowerCase();
+    const selectedIds = formData.members.map(m => m.member_id);
     
     return (Array.isArray(members) ? members : []).filter(member => {
       const name = (member.name || '').toLowerCase();
       const phone = (member.phone || '').toLowerCase();
       return (name.includes(keyword) || phone.includes(keyword)) && !selectedIds.includes(member.id);
     });
+  };
+
+  const handleNewMemberSearchInput = (value) => {
+    setNewMemberSearchInput(value);
+    setShowNewMemberDropdown(value.length > 0);
+  };
+
+  const handleAddMember = (member) => {
+    if (!newMemberPosition.trim()) {
+      alert('직책을 입력해주세요.');
+      return;
+    }
+    
+    setFormData(prev => {
+      // 이미 추가된 멤버인지 확인
+      if (prev.members.some(m => m.member_id === member.id)) {
+        alert('이미 추가된 구성원입니다.');
+        return prev;
+      }
+      return {
+        ...prev,
+        members: [...prev.members, { position_name: newMemberPosition.trim(), member_id: member.id }]
+      };
+    });
+    setNewMemberPosition('');
+    setNewMemberSearchInput('');
+    setShowNewMemberDropdown(false);
+  };
+
+  const handleRemoveMember = (index) => {
+    setFormData(prev => ({
+      ...prev,
+      members: prev.members.filter((_, i) => i !== index)
+    }));
   };
 
   const handleSort = (column) => {
@@ -2264,109 +2264,47 @@ function DepartmentManagement() {
     });
   };
 
-  const getSelectedMembers = () => {
-    const selectedIds = formData.member_ids || [];
-    return (Array.isArray(members) ? members : []).filter(member => selectedIds.includes(member.id));
+  const getMemberName = (memberId) => {
+    const member = (Array.isArray(members) ? members : []).find(m => m.id === memberId);
+    return member ? member.name : '';
   };
 
-  const handlePositionSearchInput = (position, value) => {
-    setPositionSearchInputs(prev => ({ ...prev, [position]: value }));
-    setShowPositionDropdowns(prev => ({ ...prev, [position]: value.length > 0 }));
-  };
-
-  const handleSelectPosition = (position, member) => {
-    const positionMap = {
-      president: 'president_id',
-      vice_president: 'vice_president_id',
-      secretary: 'secretary_id',
-      treasurer: 'treasurer_id',
-      clerk: 'clerk_id'
-    };
-    const fieldName = positionMap[position];
+  // 구성원을 직책별로 그룹화하는 함수
+  const groupMembersByPosition = (membersArray) => {
+    if (!membersArray || !Array.isArray(membersArray) || membersArray.length === 0) {
+      return [];
+    }
     
-    setFormData(prev => ({
-      ...prev,
-      [fieldName]: member.id
-    }));
-    
-    setPositionSearchInputs(prev => ({ ...prev, [position]: '' }));
-    setShowPositionDropdowns(prev => ({ ...prev, [position]: false }));
-  };
-
-  const handleRemovePosition = (position) => {
-    const positionMap = {
-      president: 'president_id',
-      vice_president: 'vice_president_id',
-      secretary: 'secretary_id',
-      treasurer: 'treasurer_id',
-      clerk: 'clerk_id'
-    };
-    const fieldName = positionMap[position];
-    
-    setFormData(prev => ({
-      ...prev,
-      [fieldName]: ''
-    }));
-  };
-
-  const getFilteredMembersForPosition = (position) => {
-    const positionMap = {
-      president: 'president_id',
-      vice_president: 'vice_president_id',
-      secretary: 'secretary_id',
-      treasurer: 'treasurer_id',
-      clerk: 'clerk_id'
-    };
-    const fieldName = positionMap[position];
-    const selectedId = formData[fieldName] || '';
-    
-    if (!positionSearchInputs[position].trim()) return [];
-    const keyword = positionSearchInputs[position].toLowerCase();
-    
-    return (Array.isArray(members) ? members : []).filter(member => {
-      if (member.id === selectedId) return false; // 이미 선택된 사람 제외
-      const name = (member.name || '').toLowerCase();
-      const phone = (member.phone || '').toLowerCase();
-      return (name.includes(keyword) || phone.includes(keyword));
+    const grouped = {};
+    membersArray.forEach(m => {
+      const position = m.position_name || '직책없음';
+      if (!grouped[position]) {
+        grouped[position] = [];
+      }
+      grouped[position].push(m.member_name || '-');
     });
-  };
-
-  const getSelectedPositionMember = (position) => {
-    const positionMap = {
-      president: 'president_id',
-      vice_president: 'vice_president_id',
-      secretary: 'secretary_id',
-      treasurer: 'treasurer_id',
-      clerk: 'clerk_id'
-    };
-    const fieldName = positionMap[position];
-    const selectedId = formData[fieldName];
     
-    if (!selectedId) return null;
-    return (Array.isArray(members) ? members : []).find(member => member.id === selectedId);
+    return Object.entries(grouped).map(([position, names]) => ({
+      position,
+      names
+    }));
   };
 
   const handleEdit = (department) => {
     setEditingId(department.id);
-    // members 문자열을 파싱하여 member_ids 추출
-    const memberNames = department.members ? department.members.split(',').map(m => m.trim()) : [];
-    const departmentMemberIds = (Array.isArray(members) ? members : [])
-      .filter(m => memberNames.includes(m.name))
-      .map(m => m.id);
+    
+    // members 배열을 그대로 사용 (이미 {position_name, member_id} 형태)
+    const departmentMembers = (department.members && Array.isArray(department.members)) 
+      ? department.members.map(m => ({ position_name: m.position_name || '', member_id: m.member_id }))
+      : [];
     
     setFormData({
       department_name: department.department_name,
-      president_id: department.president_id || '',
-      vice_president_id: department.vice_president_id || '',
-      secretary_id: department.secretary_id || '',
-      treasurer_id: department.treasurer_id || '',
-      clerk_id: department.clerk_id || '',
-      member_ids: departmentMemberIds
+      members: departmentMembers
     });
-    setMemberSearchInput('');
-    setShowMemberDropdown(false);
-    setPositionSearchInputs({ president: '', vice_president: '', secretary: '', treasurer: '', clerk: '' });
-    setShowPositionDropdowns({ president: false, vice_president: false, secretary: false, treasurer: false, clerk: false });
+    setNewMemberPosition('');
+    setNewMemberSearchInput('');
+    setShowNewMemberDropdown(false);
     
     // 폼이 숨겨져 있으면 표시
     setShowForm(true);
@@ -2383,17 +2321,11 @@ function DepartmentManagement() {
   const handleNewDepartment = () => {
     setFormData({ 
       department_name: '', 
-      president_id: '', 
-      vice_president_id: '', 
-      secretary_id: '', 
-      treasurer_id: '', 
-      clerk_id: '', 
-      member_ids: [] 
+      members: []
     });
-    setMemberSearchInput('');
-    setShowMemberDropdown(false);
-    setPositionSearchInputs({ president: '', vice_president: '', secretary: '', treasurer: '', clerk: '' });
-    setShowPositionDropdowns({ president: false, vice_president: false, secretary: false, treasurer: false, clerk: false });
+    setNewMemberPosition('');
+    setNewMemberSearchInput('');
+    setShowNewMemberDropdown(false);
     setEditingId(null);
     setShowForm(true);
     
@@ -2410,17 +2342,11 @@ function DepartmentManagement() {
     setEditingId(null);
     setFormData({ 
       department_name: '', 
-      president_id: '', 
-      vice_president_id: '', 
-      secretary_id: '', 
-      treasurer_id: '', 
-      clerk_id: '', 
-      member_ids: [] 
+      members: []
     });
-    setMemberSearchInput('');
-    setShowMemberDropdown(false);
-    setPositionSearchInputs({ president: '', vice_president: '', secretary: '', treasurer: '', clerk: '' });
-    setShowPositionDropdowns({ president: false, vice_president: false, secretary: false, treasurer: false, clerk: false });
+    setNewMemberPosition('');
+    setNewMemberSearchInput('');
+    setShowNewMemberDropdown(false);
     setShowForm(false); // 취소 시 폼 숨기기
   };
 
@@ -2441,17 +2367,11 @@ function DepartmentManagement() {
       }
       setFormData({ 
         department_name: '', 
-        president_id: '', 
-        vice_president_id: '', 
-        secretary_id: '', 
-        treasurer_id: '', 
-        clerk_id: '', 
-        member_ids: [] 
+        members: []
       });
-      setMemberSearchInput('');
-      setShowMemberDropdown(false);
-      setPositionSearchInputs({ president: '', vice_president: '', secretary: '', treasurer: '', clerk: '' });
-      setShowPositionDropdowns({ president: false, vice_president: false, secretary: false, treasurer: false, clerk: false });
+      setNewMemberPosition('');
+      setNewMemberSearchInput('');
+      setShowNewMemberDropdown(false);
       setEditingId(null);
       fetchDepartments();
     } catch (error) {
@@ -2501,260 +2421,71 @@ function DepartmentManagement() {
             <label>부서명 *</label>
             <input type="text" name="department_name" value={formData.department_name} onChange={handleInputChange} required />
           </div>
-          {/* 직책별 선택 */}
+          
+          {/* 구성원 추가 */}
           <div className="form-subsection">
-            <h3>직책별 선택</h3>
-            <div className="position-selection-grid">
-              {/* 회장 */}
-              <div className="form-group">
-                <label>회장</label>
-                <div className="autocomplete-container">
-                  <input
-                    type="text"
-                    placeholder="검색..."
-                    value={positionSearchInputs.president}
-                    onChange={(e) => handlePositionSearchInput('president', e.target.value)}
-                    onFocus={() => positionSearchInputs.president && setShowPositionDropdowns(prev => ({ ...prev, president: true }))}
-                    className="autocomplete-input"
-                  />
-                  {showPositionDropdowns.president && getFilteredMembersForPosition('president').length > 0 && (
-                    <div className="autocomplete-dropdown">
-                      {getFilteredMembersForPosition('president').map(member => (
-                        <div
-                          key={member.id}
-                          className="autocomplete-item"
-                          onClick={() => handleSelectPosition('president', member)}
-                        >
-                          {member.name} ({member.phone})
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {getSelectedPositionMember('president') && (
-                    <div className="selected-position-member">
-                      <span className="tag">
-                        {getSelectedPositionMember('president').name}
-                        <button
-                          type="button"
-                          className="tag-remove"
-                          onClick={() => handleRemovePosition('president')}
-                        >
-                          ×
-                        </button>
-                      </span>
-                    </div>
-                  )}
-                </div>
+            <h3>구성원 추가</h3>
+            <div className="form-group" style={{ display: 'flex', flexDirection: 'row', gap: '15px', alignItems: 'center' }}>
+              {/* 직책 섹션 - 왼쪽 */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '0 1 auto', minWidth: '200px' }}>
+                <label style={{ whiteSpace: 'nowrap', marginRight: '5px' }}>직책</label>
+                <input
+                  type="text"
+                  placeholder="직책을 입력하세요 (예: 부장, 회장, 담당교역자 등)"
+                  value={newMemberPosition}
+                  onChange={(e) => setNewMemberPosition(e.target.value)}
+                  style={{ flex: '1', minWidth: '150px' }}
+                />
               </div>
-
-              {/* 부회장 */}
-              <div className="form-group">
-                <label>부회장</label>
-                <div className="autocomplete-container">
+              {/* 성도검색 섹션 - 오른쪽 */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '1 1 auto', minWidth: '250px' }}>
+                <label style={{ whiteSpace: 'nowrap', marginRight: '5px' }}>성도검색</label>
+                <div className="autocomplete-container" style={{ flex: '1', position: 'relative' }}>
                   <input
                     type="text"
-                    placeholder="검색..."
-                    value={positionSearchInputs.vice_president}
-                    onChange={(e) => handlePositionSearchInput('vice_president', e.target.value)}
-                    onFocus={() => positionSearchInputs.vice_president && setShowPositionDropdowns(prev => ({ ...prev, vice_president: true }))}
+                    placeholder="성도 이름 또는 전화번호로 검색..."
+                    value={newMemberSearchInput}
+                    onChange={(e) => handleNewMemberSearchInput(e.target.value)}
+                    onFocus={() => newMemberSearchInput && setShowNewMemberDropdown(true)}
                     className="autocomplete-input"
+                    style={{ width: '100%' }}
                   />
-                  {showPositionDropdowns.vice_president && getFilteredMembersForPosition('vice_president').length > 0 && (
+                  {showNewMemberDropdown && getFilteredMembersForNew().length > 0 && (
                     <div className="autocomplete-dropdown">
-                      {getFilteredMembersForPosition('vice_president').map(member => (
+                      {getFilteredMembersForNew().map(member => (
                         <div
                           key={member.id}
                           className="autocomplete-item"
-                          onClick={() => handleSelectPosition('vice_president', member)}
+                          onClick={() => handleAddMember(member)}
                         >
                           {member.name} ({member.phone})
                         </div>
                       ))}
-                    </div>
-                  )}
-                  {getSelectedPositionMember('vice_president') && (
-                    <div className="selected-position-member">
-                      <span className="tag">
-                        {getSelectedPositionMember('vice_president').name}
-                        <button
-                          type="button"
-                          className="tag-remove"
-                          onClick={() => handleRemovePosition('vice_president')}
-                        >
-                          ×
-                        </button>
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* 총무 */}
-              <div className="form-group">
-                <label>총무</label>
-                <div className="autocomplete-container">
-                  <input
-                    type="text"
-                    placeholder="검색..."
-                    value={positionSearchInputs.secretary}
-                    onChange={(e) => handlePositionSearchInput('secretary', e.target.value)}
-                    onFocus={() => positionSearchInputs.secretary && setShowPositionDropdowns(prev => ({ ...prev, secretary: true }))}
-                    className="autocomplete-input"
-                  />
-                  {showPositionDropdowns.secretary && getFilteredMembersForPosition('secretary').length > 0 && (
-                    <div className="autocomplete-dropdown">
-                      {getFilteredMembersForPosition('secretary').map(member => (
-                        <div
-                          key={member.id}
-                          className="autocomplete-item"
-                          onClick={() => handleSelectPosition('secretary', member)}
-                        >
-                          {member.name} ({member.phone})
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {getSelectedPositionMember('secretary') && (
-                    <div className="selected-position-member">
-                      <span className="tag">
-                        {getSelectedPositionMember('secretary').name}
-                        <button
-                          type="button"
-                          className="tag-remove"
-                          onClick={() => handleRemovePosition('secretary')}
-                        >
-                          ×
-                        </button>
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* 회계 */}
-              <div className="form-group">
-                <label>회계</label>
-                <div className="autocomplete-container">
-                  <input
-                    type="text"
-                    placeholder="검색..."
-                    value={positionSearchInputs.treasurer}
-                    onChange={(e) => handlePositionSearchInput('treasurer', e.target.value)}
-                    onFocus={() => positionSearchInputs.treasurer && setShowPositionDropdowns(prev => ({ ...prev, treasurer: true }))}
-                    className="autocomplete-input"
-                  />
-                  {showPositionDropdowns.treasurer && getFilteredMembersForPosition('treasurer').length > 0 && (
-                    <div className="autocomplete-dropdown">
-                      {getFilteredMembersForPosition('treasurer').map(member => (
-                        <div
-                          key={member.id}
-                          className="autocomplete-item"
-                          onClick={() => handleSelectPosition('treasurer', member)}
-                        >
-                          {member.name} ({member.phone})
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {getSelectedPositionMember('treasurer') && (
-                    <div className="selected-position-member">
-                      <span className="tag">
-                        {getSelectedPositionMember('treasurer').name}
-                        <button
-                          type="button"
-                          className="tag-remove"
-                          onClick={() => handleRemovePosition('treasurer')}
-                        >
-                          ×
-                        </button>
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* 서기 */}
-              <div className="form-group">
-                <label>서기</label>
-                <div className="autocomplete-container">
-                  <input
-                    type="text"
-                    placeholder="검색..."
-                    value={positionSearchInputs.clerk}
-                    onChange={(e) => handlePositionSearchInput('clerk', e.target.value)}
-                    onFocus={() => positionSearchInputs.clerk && setShowPositionDropdowns(prev => ({ ...prev, clerk: true }))}
-                    className="autocomplete-input"
-                  />
-                  {showPositionDropdowns.clerk && getFilteredMembersForPosition('clerk').length > 0 && (
-                    <div className="autocomplete-dropdown">
-                      {getFilteredMembersForPosition('clerk').map(member => (
-                        <div
-                          key={member.id}
-                          className="autocomplete-item"
-                          onClick={() => handleSelectPosition('clerk', member)}
-                        >
-                          {member.name} ({member.phone})
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {getSelectedPositionMember('clerk') && (
-                    <div className="selected-position-member">
-                      <span className="tag">
-                        {getSelectedPositionMember('clerk').name}
-                        <button
-                          type="button"
-                          className="tag-remove"
-                          onClick={() => handleRemovePosition('clerk')}
-                        >
-                          ×
-                        </button>
-                      </span>
                     </div>
                   )}
                 </div>
               </div>
             </div>
-          </div>
-          <div className="form-group">
-            <label>부서원 선택</label>
-            <div className="autocomplete-container">
-              <input
-                type="text"
-                placeholder="성도 이름 또는 전화번호로 검색..."
-                value={memberSearchInput}
-                onChange={(e) => handleMemberSearchInput(e.target.value)}
-                onFocus={() => memberSearchInput && setShowMemberDropdown(true)}
-                className="autocomplete-input"
-              />
-              {showMemberDropdown && getFilteredMembers().length > 0 && (
-                <div className="autocomplete-dropdown">
-                  {getFilteredMembers().map(member => (
-                    <div
-                      key={member.id}
-                      className="autocomplete-item"
-                      onClick={() => handleSelectMember(member)}
-                    >
-                      {member.name} ({member.phone})
-                    </div>
+            
+            {/* 추가된 구성원 목록 */}
+            {formData.members && formData.members.length > 0 && (
+              <div className="form-group">
+                <div className="selected-tags" style={{ marginTop: '10px' }}>
+                  {formData.members.map((member, index) => (
+                    <span key={index} className="tag">
+                      <strong>{member.position_name}</strong>: {getMemberName(member.member_id)}
+                      <button
+                        type="button"
+                        className="tag-remove"
+                        onClick={() => handleRemoveMember(index)}
+                      >
+                        ×
+                      </button>
+                    </span>
                   ))}
                 </div>
-              )}
-              <div className="selected-tags">
-                {getSelectedMembers().map(member => (
-                  <span key={member.id} className="tag">
-                    {member.name} ({member.phone})
-                    <button
-                      type="button"
-                      className="tag-remove"
-                      onClick={() => handleRemoveMember(member.id)}
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
               </div>
-            </div>
+            )}
           </div>
           <div className="form-actions">
             <button type="submit" className="btn btn-primary">{editingId ? '수정' : '등록'}</button>
@@ -2797,20 +2528,13 @@ function DepartmentManagement() {
             if (!departmentSearchKeyword.trim()) return true;
             const keyword = departmentSearchKeyword.toLowerCase();
             const departmentName = (department.department_name || '').toLowerCase();
-            const presidentName = (department.president_name || '').toLowerCase();
-            const vicePresidentName = (department.vice_president_name || '').toLowerCase();
-            const secretaryName = (department.secretary_name || '').toLowerCase();
-            const treasurerName = (department.treasurer_name || '').toLowerCase();
-            const clerkName = (department.clerk_name || '').toLowerCase();
-            const members = (department.members || '').toLowerCase();
             
-            return departmentName.includes(keyword) || 
-                   presidentName.includes(keyword) ||
-                   vicePresidentName.includes(keyword) ||
-                   secretaryName.includes(keyword) ||
-                   treasurerName.includes(keyword) ||
-                   clerkName.includes(keyword) ||
-                   members.includes(keyword);
+            // members 배열에서 검색
+            const membersText = (department.members && Array.isArray(department.members))
+              ? department.members.map(m => `${m.position_name || ''} ${m.member_name || ''}`).join(' ').toLowerCase()
+              : '';
+            
+            return departmentName.includes(keyword) || membersText.includes(keyword);
           });
 
           if (loading) {
@@ -2820,81 +2544,57 @@ function DepartmentManagement() {
           } else {
             const sortedDepartments = sortData(filteredDepartments, sortColumn, sortDirection);
             return (
-              <div className="members-table-container">
-                <table className="members-table">
-                  <thead>
-                    <tr>
-                      <th onClick={() => handleSort('department_name')} className="sortable-header">
-                        부서명 {sortColumn === 'department_name' && (sortDirection === 'asc' ? '↑' : '↓')}
-                      </th>
-                      <th onClick={() => handleSort('president_name')} className="sortable-header">
-                        회장 {sortColumn === 'president_name' && (sortDirection === 'asc' ? '↑' : '↓')}
-                      </th>
-                      <th onClick={() => handleSort('vice_president_name')} className="sortable-header">
-                        부회장 {sortColumn === 'vice_president_name' && (sortDirection === 'asc' ? '↑' : '↓')}
-                      </th>
-                      <th onClick={() => handleSort('secretary_name')} className="sortable-header">
-                        총무 {sortColumn === 'secretary_name' && (sortDirection === 'asc' ? '↑' : '↓')}
-                      </th>
-                      <th onClick={() => handleSort('treasurer_name')} className="sortable-header">
-                        회계 {sortColumn === 'treasurer_name' && (sortDirection === 'asc' ? '↑' : '↓')}
-                      </th>
-                      <th onClick={() => handleSort('clerk_name')} className="sortable-header">
-                        서기 {sortColumn === 'clerk_name' && (sortDirection === 'asc' ? '↑' : '↓')}
-                      </th>
-                      <th onClick={() => handleSort('members')} className="sortable-header">
-                        부서원 {sortColumn === 'members' && (sortDirection === 'asc' ? '↑' : '↓')}
-                      </th>
-                      <th onClick={() => handleSort('created_at')} className="sortable-header">
-                        등록일 {sortColumn === 'created_at' && (sortDirection === 'asc' ? '↑' : '↓')}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedDepartments.map(department => (
-                      <tr 
-                        key={department.id}
-                        onClick={() => handleEdit(department)}
-                        className="member-row-clickable"
-                        style={{ cursor: 'pointer' }}
-                      >
-                        <td>{department.department_name}</td>
-                        <td>{department.president_name || '-'}</td>
-                        <td>{department.vice_president_name || '-'}</td>
-                        <td>{department.secretary_name || '-'}</td>
-                        <td>{department.treasurer_name || '-'}</td>
-                        <td>{department.clerk_name || '-'}</td>
-                        <td>{department.members || '-'}</td>
-                        <td>{new Date(department.created_at).toLocaleDateString()}</td>
+              <>
+                <div className="members-table-container">
+                  <table className="members-table">
+                    <thead>
+                      <tr>
+                        <th onClick={() => handleSort('department_name')} className="sortable-header">
+                          부서명 {sortColumn === 'department_name' && (sortDirection === 'asc' ? '↑' : '↓')}
+                        </th>
+                        <th>구성원</th>
+                        <th onClick={() => handleSort('created_at')} className="sortable-header">
+                          등록일 {sortColumn === 'created_at' && (sortDirection === 'asc' ? '↑' : '↓')}
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {sortedDepartments.map(department => (
+                        <tr 
+                          key={department.id}
+                          onClick={() => handleEdit(department)}
+                          className="member-row-clickable"
+                          style={{ cursor: 'pointer' }}
+                        >
+                          <td>{department.department_name}</td>
+                          <td>
+                            {(() => {
+                              const grouped = groupMembersByPosition(department.members);
+                              if (grouped.length === 0) {
+                                return '-';
+                              }
+                              return grouped.map((group, idx) => (
+                                <span key={idx} style={{ display: 'inline-block', marginRight: '15px', marginBottom: '4px' }}>
+                                  <strong>{group.position}</strong>: {group.names.join(', ')}
+                                </span>
+                              ));
+                            })()}
+                          </td>
+                          <td>{new Date(department.created_at).toLocaleDateString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {departmentSearchKeyword && (
+                  <div className="search-result-info">
+                    검색 결과: {filteredDepartments.length}개 / 전체 {departments.length}개
+                  </div>
+                )}
+              </>
             );
           }
         })()}
-        {departmentSearchKeyword && (
-          <div className="search-result-info">
-            검색 결과: {departments.filter(d => {
-              const keyword = departmentSearchKeyword.toLowerCase();
-              const departmentName = (d.department_name || '').toLowerCase();
-              const presidentName = (d.president_name || '').toLowerCase();
-              const vicePresidentName = (d.vice_president_name || '').toLowerCase();
-              const secretaryName = (d.secretary_name || '').toLowerCase();
-              const treasurerName = (d.treasurer_name || '').toLowerCase();
-              const clerkName = (d.clerk_name || '').toLowerCase();
-              const members = (d.members || '').toLowerCase();
-              return departmentName.includes(keyword) || 
-                     presidentName.includes(keyword) ||
-                     vicePresidentName.includes(keyword) ||
-                     secretaryName.includes(keyword) ||
-                     treasurerName.includes(keyword) ||
-                     clerkName.includes(keyword) ||
-                     members.includes(keyword);
-            }).length}개 / 전체 {departments.length}개
-          </div>
-        )}
       </section>
     </div>
   );

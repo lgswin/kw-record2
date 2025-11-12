@@ -631,24 +631,23 @@ app.delete('/api/parties/:id', async (req, res) => {
 app.get('/api/departments', async (req, res) => {
   try {
     const [rows] = await pool.execute(`
-      SELECT d.*, 
-        m1.name as president_name,
-        m2.name as vice_president_name,
-        m3.name as secretary_name,
-        m4.name as treasurer_name,
-        m5.name as clerk_name,
-        GROUP_CONCAT(DISTINCT m6.name) as members
+      SELECT d.*
       FROM departments d
-      LEFT JOIN members m1 ON d.president_id = m1.id
-      LEFT JOIN members m2 ON d.vice_president_id = m2.id
-      LEFT JOIN members m3 ON d.secretary_id = m3.id
-      LEFT JOIN members m4 ON d.treasurer_id = m4.id
-      LEFT JOIN members m5 ON d.clerk_id = m5.id
-      LEFT JOIN member_departments md ON d.id = md.department_id
-      LEFT JOIN members m6 ON md.member_id = m6.id
-      GROUP BY d.id
       ORDER BY d.created_at DESC
     `);
+    
+    // 각 부서의 구성원 정보를 별도로 조회
+    for (let department of rows) {
+      const [members] = await pool.execute(`
+        SELECT md.id, md.position_name, m.id as member_id, m.name as member_name, m.phone
+        FROM member_departments md
+        LEFT JOIN members m ON md.member_id = m.id
+        WHERE md.department_id = ?
+        ORDER BY md.id
+      `, [department.id]);
+      department.members = members;
+    }
+    
     res.json(rows);
   } catch (error) {
     console.error('부서 목록 조회 오류:', error);
@@ -659,7 +658,7 @@ app.get('/api/departments', async (req, res) => {
 // 새 부서 추가
 app.post('/api/departments', async (req, res) => {
   try {
-    const { department_name, president_id, vice_president_id, secretary_id, treasurer_id, clerk_id, member_ids } = req.body;
+    const { department_name, members } = req.body;
     
     if (!department_name) {
       return res.status(400).json({ error: '부서명은 필수입니다.' });
@@ -670,26 +669,21 @@ app.post('/api/departments', async (req, res) => {
 
     try {
       const [result] = await connection.execute(
-        'INSERT INTO departments (department_name, president_id, vice_president_id, secretary_id, treasurer_id, clerk_id) VALUES (?, ?, ?, ?, ?, ?)',
-        [
-          department_name, 
-          president_id || null,
-          vice_president_id || null,
-          secretary_id || null,
-          treasurer_id || null,
-          clerk_id || null
-        ]
+        'INSERT INTO departments (department_name) VALUES (?)',
+        [department_name]
       );
       
       const departmentId = result.insertId;
 
-      // 부서원 추가
-      if (member_ids && member_ids.length > 0) {
-        for (const memberId of member_ids) {
-          await connection.execute(
-            'INSERT INTO member_departments (member_id, department_id) VALUES (?, ?)',
-            [memberId, departmentId]
-          );
+      // 부서 구성원 추가 (직책과 멤버 정보)
+      if (members && Array.isArray(members) && members.length > 0) {
+        for (const member of members) {
+          if (member.position_name && member.member_id) {
+            await connection.execute(
+              'INSERT INTO member_departments (member_id, department_id, position_name) VALUES (?, ?, ?)',
+              [member.member_id, departmentId, member.position_name]
+            );
+          }
         }
       }
 
@@ -715,7 +709,7 @@ app.post('/api/departments', async (req, res) => {
 app.put('/api/departments/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { department_name, president_id, vice_president_id, secretary_id, treasurer_id, clerk_id, member_ids } = req.body;
+    const { department_name, members } = req.body;
     
     if (!department_name) {
       return res.status(400).json({ error: '부서명은 필수입니다.' });
@@ -727,28 +721,22 @@ app.put('/api/departments/:id', async (req, res) => {
     try {
       // 부서 정보 수정
       await connection.execute(
-        'UPDATE departments SET department_name = ?, president_id = ?, vice_president_id = ?, secretary_id = ?, treasurer_id = ?, clerk_id = ? WHERE id = ?',
-        [
-          department_name,
-          president_id || null,
-          vice_president_id || null,
-          secretary_id || null,
-          treasurer_id || null,
-          clerk_id || null,
-          id
-        ]
+        'UPDATE departments SET department_name = ? WHERE id = ?',
+        [department_name, id]
       );
 
       // 기존 부서원 관계 삭제
       await connection.execute('DELETE FROM member_departments WHERE department_id = ?', [id]);
 
-      // 새로운 부서원 관계 추가
-      if (member_ids && Array.isArray(member_ids) && member_ids.length > 0) {
-        for (const memberId of member_ids) {
-          await connection.execute(
-            'INSERT INTO member_departments (member_id, department_id) VALUES (?, ?)',
-            [memberId, id]
-          );
+      // 새로운 부서원 관계 추가 (직책과 멤버 정보)
+      if (members && Array.isArray(members) && members.length > 0) {
+        for (const member of members) {
+          if (member.position_name && member.member_id) {
+            await connection.execute(
+              'INSERT INTO member_departments (member_id, department_id, position_name) VALUES (?, ?, ?)',
+              [member.member_id, id, member.position_name]
+            );
+          }
         }
       }
 
