@@ -47,6 +47,12 @@ function App() {
         >
           조직 관리
         </button>
+        <button 
+          className={activeTab === 'attendance' ? 'nav-tab active' : 'nav-tab'}
+          onClick={() => setActiveTab('attendance')}
+        >
+          출석부
+        </button>
       </nav>
 
       <main className="container">
@@ -55,6 +61,7 @@ function App() {
         {activeTab === 'parties' && <PartyManagement />}
         {activeTab === 'departments' && <DepartmentManagement />}
         {activeTab === 'organizations' && <OrganizationManagement />}
+        {activeTab === 'attendance' && <AttendanceManagement />}
       </main>
     </div>
   );
@@ -3094,6 +3101,519 @@ function OrganizationManagement() {
                      memberName.includes(keyword) || 
                      responsibility.includes(keyword);
             }).length}명 / 전체 {organizations.length}명
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+// 출석부 관리 컴포넌트
+function AttendanceManagement() {
+  const [events, setEvents] = useState([]);
+  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [members, setMembers] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [showEventForm, setShowEventForm] = useState(false);
+  const [newGuestName, setNewGuestName] = useState('');
+  const [addingGuest, setAddingGuest] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [eventFormData, setEventFormData] = useState({
+    event_name: '',
+    event_date: new Date().toISOString().slice(0, 16) // YYYY-MM-DDTHH:mm 형식
+  });
+
+  useEffect(() => {
+    if (!selectedEvent) {
+      fetchEvents();
+    }
+  }, [selectedEvent]);
+
+  useEffect(() => {
+    if (selectedEvent) {
+      fetchAttendance(selectedEvent.id);
+      setSearchQuery(''); // 이벤트 변경 시 검색어 초기화
+    }
+  }, [selectedEvent]);
+
+  const fetchEvents = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/attendance/events`);
+      setEvents(response.data);
+    } catch (error) {
+      console.error('이벤트 목록 조회 오류:', error);
+      alert('이벤트 목록을 가져올 수 없습니다.');
+    }
+  };
+
+  const fetchAttendance = async (eventId) => {
+    setLoading(true);
+    try {
+      const response = await axios.get(`${API_URL}/attendance/events/${eventId}`);
+      setMembers(response.data.allMembers || []);
+    } catch (error) {
+      console.error('출석부 조회 오류:', error);
+      alert('출석부를 가져올 수 없습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleNewEvent = () => {
+    setEventFormData({
+      event_name: '',
+      event_date: new Date().toISOString().slice(0, 16)
+    });
+    setShowEventForm(true);
+  };
+
+  const handleEventSubmit = async (e) => {
+    e.preventDefault();
+    if (!eventFormData.event_name.trim()) {
+      alert('이벤트명을 입력해주세요.');
+      return;
+    }
+
+    try {
+      await axios.post(`${API_URL}/attendance/events`, eventFormData);
+      alert('출석부 이벤트가 생성되었습니다.');
+      setShowEventForm(false);
+      fetchEvents();
+    } catch (error) {
+      console.error('이벤트 생성 오류:', error);
+      alert('이벤트 생성에 실패했습니다.');
+    }
+  };
+
+  const handleEventSelect = (event) => {
+    setSelectedEvent(event);
+  };
+
+  const handleBackToList = () => {
+    setSelectedEvent(null);
+    setMembers([]);
+  };
+
+  const handleMemberClick = async (member) => {
+    if (!selectedEvent) return;
+
+    // 현재 출석 상태
+    const currentAttended = member.attended ? 1 : 0;
+    const newAttended = currentAttended ? 0 : 1;
+
+    // 즉시 UI 업데이트 (optimistic update)
+    setMembers(prevMembers => 
+      prevMembers.map(m => 
+        m.id === member.id 
+          ? { ...m, attended: newAttended }
+          : m
+      )
+    );
+
+    // 백그라운드에서 데이터베이스 업데이트
+    try {
+      const response = await axios.post(`${API_URL}/attendance/records`, {
+        event_id: selectedEvent.id,
+        member_id: member.id
+      });
+      
+      // 서버 응답으로 최종 상태 확인 (동기화)
+      setMembers(prevMembers => 
+        prevMembers.map(m => 
+          m.id === member.id 
+            ? { ...m, attended: response.data.attended ? 1 : 0 }
+            : m
+        )
+      );
+    } catch (error) {
+      console.error('출석 기록 토글 오류:', error);
+      
+      // 실패 시 이전 상태로 롤백
+      setMembers(prevMembers => 
+        prevMembers.map(m => 
+          m.id === member.id 
+            ? { ...m, attended: currentAttended }
+            : m
+        )
+      );
+      
+      alert('출석 기록 처리에 실패했습니다. 다시 시도해주세요.');
+    }
+  };
+
+  const handleAddGuest = async (e) => {
+    e.preventDefault();
+    if (!selectedEvent || !newGuestName.trim()) {
+      alert('이름을 입력해주세요.');
+      return;
+    }
+
+    setAddingGuest(true);
+    try {
+      const response = await axios.post(`${API_URL}/attendance/add-guest`, {
+        event_id: selectedEvent.id,
+        name: newGuestName.trim()
+      });
+
+      // 새 멤버를 목록에 추가 (출석 상태로, is_new_member 포함)
+      const newMember = {
+        id: response.data.member.id,
+        name: response.data.member.name,
+        phone: response.data.member.phone,
+        attended: 1,
+        is_new_member: response.data.member.is_new_member || response.data.isNewMember
+      };
+
+      // 이미 목록에 있는지 확인
+      const existingIndex = members.findIndex(m => m.id === newMember.id);
+      if (existingIndex >= 0) {
+        // 기존 멤버가 있으면 출석 상태와 새신자 정보 업데이트
+        setMembers(prevMembers => 
+          prevMembers.map(m => 
+            m.id === newMember.id 
+              ? { ...m, attended: 1, is_new_member: newMember.is_new_member }
+              : m
+          )
+        );
+      } else {
+        // 새 멤버 추가
+        setMembers(prevMembers => [...prevMembers, newMember]);
+      }
+      
+      // 출석부 다시 불러오기 (데이터베이스의 최신 정보 반영)
+      await fetchAttendance(selectedEvent.id);
+
+      setNewGuestName('');
+    } catch (error) {
+      console.error('신규 출석자 추가 오류:', error);
+      alert('신규 출석자 추가에 실패했습니다.');
+    } finally {
+      setAddingGuest(false);
+    }
+  };
+
+  const handleDeleteEvent = async (eventId, e) => {
+    e.stopPropagation();
+    if (!window.confirm('정말로 이 출석부 이벤트를 삭제하시겠습니까?')) return;
+    
+    try {
+      await axios.delete(`${API_URL}/attendance/events/${eventId}`);
+      alert('출석부 이벤트가 삭제되었습니다.');
+      if (selectedEvent && selectedEvent.id === eventId) {
+        setSelectedEvent(null);
+        setMembers([]);
+      }
+      fetchEvents();
+    } catch (error) {
+      console.error('이벤트 삭제 오류:', error);
+      alert('이벤트 삭제에 실패했습니다.');
+    }
+  };
+
+  const formatDateTime = (dateTimeString) => {
+    if (!dateTimeString) return '';
+    const date = new Date(dateTimeString);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day} ${hours}:${minutes}`;
+  };
+
+  // 출석부 카드 뷰 (전체 화면)
+  if (selectedEvent) {
+    return (
+      <div style={{ width: '100%', height: '100%' }}>
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          marginBottom: '15px',
+          padding: '10px 0'
+        }}>
+          <div>
+            <button 
+              onClick={handleBackToList} 
+              className="btn btn-secondary"
+              style={{ marginRight: '15px' }}
+            >
+              ← 목록으로
+            </button>
+            <span style={{ fontSize: '1.5em', fontWeight: 'bold' }}>
+              {selectedEvent.event_name}
+            </span>
+          </div>
+          <div style={{ color: '#666', fontSize: '0.95em' }}>
+            {formatDateTime(selectedEvent.event_date)} | 
+            출석: {members.filter(m => m.attended).length}명 / 전체: {members.length}명
+          </div>
+        </div>
+
+        {/* 검색 필드와 신규 출석자 추가 폼 (좌우 배치) */}
+        <div style={{ 
+          marginBottom: '15px', 
+          display: 'flex',
+          gap: '15px',
+          alignItems: 'stretch'
+        }}>
+          {/* 검색 필드 */}
+          <div style={{
+            flex: 1,
+            padding: '10px',
+            backgroundColor: '#f5f5f5',
+            borderRadius: '6px'
+          }}>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="성도 이름으로 검색..."
+              style={{
+                width: '100%',
+                padding: '10px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '0.95em',
+                boxSizing: 'border-box'
+              }}
+            />
+          </div>
+
+          {/* 신규 출석자 추가 폼 */}
+          <div style={{ 
+            flex: 1,
+            padding: '10px', 
+            backgroundColor: '#f5f5f5', 
+            borderRadius: '6px',
+            display: 'flex',
+            gap: '10px',
+            alignItems: 'center'
+          }}>
+            <form onSubmit={handleAddGuest} style={{ display: 'flex', gap: '10px', flex: 1, alignItems: 'center', width: '100%' }}>
+              <input
+                type="text"
+                value={newGuestName}
+                onChange={(e) => setNewGuestName(e.target.value)}
+                placeholder="신규 출석자 이름 입력"
+                style={{
+                  flex: 1,
+                  padding: '10px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '0.95em'
+                }}
+                disabled={addingGuest}
+              />
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={addingGuest || !newGuestName.trim()}
+                style={{ whiteSpace: 'nowrap' }}
+              >
+                {addingGuest ? '추가 중...' : '추가'}
+              </button>
+            </form>
+          </div>
+        </div>
+
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '40px' }}>로딩 중...</div>
+        ) : (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+            gap: '10px',
+            padding: '10px 0'
+          }}>
+            {(() => {
+              const filteredMembers = members.filter(member => {
+                if (!searchQuery.trim()) return true;
+                return member.name.toLowerCase().includes(searchQuery.toLowerCase().trim());
+              });
+
+              if (filteredMembers.length === 0 && searchQuery.trim()) {
+                return (
+                  <div style={{
+                    gridColumn: '1 / -1',
+                    textAlign: 'center',
+                    padding: '40px',
+                    color: '#999'
+                  }}>
+                    검색 결과가 없습니다.
+                  </div>
+                );
+              }
+
+              return filteredMembers.map((member) => {
+                const isNewMember = member.is_new_member === 1 || member.is_new_member === true;
+                return (
+                  <div
+                    key={member.id}
+                    onClick={() => handleMemberClick(member)}
+                    style={{
+                      padding: '10px 8px',
+                      border: isNewMember 
+                        ? (member.attended ? '2px solid #ff9800' : '2px solid #ffb74d')
+                        : (member.attended ? '2px solid #4caf50' : '2px solid #ddd'),
+                      borderRadius: '6px',
+                      backgroundColor: isNewMember
+                        ? (member.attended ? '#fff3e0' : '#fff')
+                        : (member.attended ? '#e8f5e9' : '#fff'),
+                      cursor: 'pointer',
+                      textAlign: 'center',
+                      transition: 'all 0.2s',
+                      boxShadow: isNewMember
+                        ? (member.attended ? '0 2px 4px rgba(255, 152, 0, 0.2)' : '0 1px 2px rgba(0,0,0,0.1)')
+                        : (member.attended ? '0 2px 4px rgba(76, 175, 80, 0.2)' : '0 1px 2px rgba(0,0,0,0.1)'),
+                      minHeight: '50px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'center',
+                      alignItems: 'center'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'scale(1.05)';
+                      e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'scale(1)';
+                      e.currentTarget.style.boxShadow = isNewMember
+                        ? (member.attended ? '0 2px 4px rgba(255, 152, 0, 0.2)' : '0 1px 2px rgba(0,0,0,0.1)')
+                        : (member.attended ? '0 2px 4px rgba(76, 175, 80, 0.2)' : '0 1px 2px rgba(0,0,0,0.1)');
+                    }}
+                  >
+                    <div style={{ 
+                      fontWeight: 'bold', 
+                      fontSize: '0.95em',
+                      wordBreak: 'keep-all',
+                      marginBottom: isNewMember ? '2px' : '0'
+                    }}>
+                      {member.name}
+                    </div>
+                    {isNewMember && (
+                      <div style={{ 
+                        fontSize: '0.75em', 
+                        color: '#ff9800',
+                        fontWeight: 'bold',
+                        marginTop: '2px'
+                      }}>
+                        (신규)
+                      </div>
+                    )}
+                  </div>
+                );
+              });
+            })()}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // 이벤트 목록 페이지 (전체 화면)
+  return (
+    <div style={{ width: '100%' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h2>출석부 관리</h2>
+        <button onClick={handleNewEvent} className="btn btn-primary">
+          새 출석부 이벤트 생성
+        </button>
+      </div>
+
+      {showEventForm && (
+        <section className="form-section" style={{ marginBottom: '30px' }}>
+          <h3>새 출석부 이벤트</h3>
+          <form onSubmit={handleEventSubmit}>
+            <div className="form-group">
+              <label>이벤트명 *</label>
+              <input
+                type="text"
+                value={eventFormData.event_name}
+                onChange={(e) => setEventFormData({ ...eventFormData, event_name: e.target.value })}
+                placeholder="예: 주일예배, 수요예배, 특별집회 등"
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label>날짜 및 시간 *</label>
+              <input
+                type="datetime-local"
+                value={eventFormData.event_date}
+                onChange={(e) => setEventFormData({ ...eventFormData, event_date: e.target.value })}
+                required
+              />
+            </div>
+            <div className="form-actions">
+              <button type="submit" className="btn btn-primary">생성</button>
+              <button type="button" className="btn btn-secondary" onClick={() => setShowEventForm(false)}>
+                취소
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+
+      <section>
+        <h3>이벤트 목록</h3>
+        {events.length === 0 ? (
+          <div style={{ padding: '40px', textAlign: 'center', color: '#666', border: '1px solid #ddd', borderRadius: '4px' }}>
+            등록된 이벤트가 없습니다. "새 출석부 이벤트 생성" 버튼을 클릭하여 이벤트를 생성하세요.
+          </div>
+        ) : (
+          <div style={{ 
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+            gap: '15px'
+          }}>
+            {events.map(event => (
+              <div
+                key={event.id}
+                onClick={() => handleEventSelect(event)}
+                style={{
+                  padding: '20px',
+                  border: '1px solid #ddd',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  backgroundColor: '#fff',
+                  transition: 'all 0.2s',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                }}
+              >
+                <div style={{ fontWeight: 'bold', fontSize: '1.2em', marginBottom: '10px' }}>
+                  {event.event_name}
+                </div>
+                <div style={{ fontSize: '0.95em', color: '#666', marginBottom: '8px' }}>
+                  {formatDateTime(event.event_date)}
+                </div>
+                <div style={{ fontSize: '0.9em', color: '#999', marginBottom: '10px' }}>
+                  출석: {event.attendance_count || 0}명
+                </div>
+                <button
+                  onClick={(e) => handleDeleteEvent(event.id, e)}
+                  style={{
+                    padding: '5px 12px',
+                    fontSize: '0.85em',
+                    backgroundColor: '#f44336',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    marginTop: '5px'
+                  }}
+                >
+                  삭제
+                </button>
+              </div>
+            ))}
           </div>
         )}
       </section>

@@ -977,6 +977,315 @@ app.post('/api/offices', async (req, res) => {
   }
 });
 
+// ==================== 출석부 API ====================
+// 모든 출석부 이벤트 조회
+app.get('/api/attendance/events', async (req, res) => {
+  try {
+    const [rows] = await pool.execute(`
+      SELECT 
+        ae.*,
+        COUNT(ar.id) as attendance_count
+      FROM attendance_events ae
+      LEFT JOIN attendance_records ar ON ae.id = ar.event_id
+      GROUP BY ae.id
+      ORDER BY ae.created_at DESC
+    `);
+    res.json(rows);
+  } catch (error) {
+    console.error('출석부 이벤트 목록 조회 오류:', error);
+    res.status(500).json({ error: '출석부 이벤트 목록을 가져올 수 없습니다.' });
+  }
+});
+
+// 특정 이벤트의 출석부 조회 (성도 목록 포함)
+app.get('/api/attendance/events/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // 이벤트 정보 조회
+    const [events] = await pool.execute(
+      'SELECT * FROM attendance_events WHERE id = ?',
+      [id]
+    );
+    
+    if (events.length === 0) {
+      return res.status(404).json({ error: '이벤트를 찾을 수 없습니다.' });
+    }
+    
+    const event = events[0];
+    
+    // 출석한 성도 목록 조회
+    const [attendedMembers] = await pool.execute(`
+      SELECT m.id, m.name, m.phone, ar.attended_at
+      FROM attendance_records ar
+      JOIN members m ON ar.member_id = m.id
+      WHERE ar.event_id = ?
+      ORDER BY m.name
+    `, [id]);
+    
+    // 모든 활성 성도 목록 조회 (출석 여부 포함)
+    const [allMembers] = await pool.execute(`
+      SELECT 
+        m.id,
+        m.name,
+        m.phone,
+        CASE WHEN ar.id IS NOT NULL THEN 1 ELSE 0 END as attended,
+        ar.attended_at,
+        COALESCE(m.is_new_member, FALSE) as is_new_member
+      FROM members m
+      LEFT JOIN attendance_records ar ON m.id = ar.member_id AND ar.event_id = ?
+      WHERE m.active = 1
+      ORDER BY m.name
+    `, [id]);
+    
+    res.json({
+      event,
+      attendedMembers,
+      allMembers
+    });
+  } catch (error) {
+    console.error('출석부 조회 오류:', error);
+    res.status(500).json({ error: '출석부를 가져올 수 없습니다.' });
+  }
+});
+
+// 새 출석부 이벤트 생성
+app.post('/api/attendance/events', async (req, res) => {
+  try {
+    const { event_name, event_date } = req.body;
+    
+    if (!event_name || !event_date) {
+      return res.status(400).json({ error: '이벤트명과 날짜는 필수입니다.' });
+    }
+    
+    const [result] = await pool.execute(
+      'INSERT INTO attendance_events (event_name, event_date) VALUES (?, ?)',
+      [event_name, event_date]
+    );
+    
+    res.status(201).json({ 
+      id: result.insertId, 
+      event_name,
+      event_date,
+      message: '출석부 이벤트가 성공적으로 생성되었습니다.' 
+    });
+  } catch (error) {
+    console.error('출석부 이벤트 생성 오류:', error);
+    res.status(500).json({ error: '출석부 이벤트 생성에 실패했습니다.' });
+  }
+});
+
+// 출석 기록 토글 (출석 체크/해제)
+app.post('/api/attendance/records', async (req, res) => {
+  try {
+    const { event_id, member_id } = req.body;
+    
+    if (!event_id || !member_id) {
+      return res.status(400).json({ error: '이벤트 ID와 성도 ID는 필수입니다.' });
+    }
+    
+    // 기존 출석 기록 확인
+    const [existing] = await pool.execute(
+      'SELECT id FROM attendance_records WHERE event_id = ? AND member_id = ?',
+      [event_id, member_id]
+    );
+    
+    if (existing.length > 0) {
+      // 출석 기록 삭제 (출석 해제)
+      await pool.execute(
+        'DELETE FROM attendance_records WHERE event_id = ? AND member_id = ?',
+        [event_id, member_id]
+      );
+      res.json({ attended: false, message: '출석이 해제되었습니다.' });
+    } else {
+      // 출석 기록 추가
+      await pool.execute(
+        'INSERT INTO attendance_records (event_id, member_id) VALUES (?, ?)',
+        [event_id, member_id]
+      );
+      
+      // 출석 횟수 확인 및 새신자 상태 업데이트
+      const [attendanceCount] = await pool.execute(
+        'SELECT COUNT(*) as count FROM attendance_records WHERE member_id = ?',
+        [member_id]
+      );
+      
+      const totalAttendance = attendanceCount[0].count;
+      
+      // 출석이 3회 이상이면 새신자 상태 해제
+      if (totalAttendance >= 3) {
+        await pool.execute(
+          'UPDATE members SET is_new_member = FALSE WHERE id = ? AND is_new_member = TRUE',
+          [member_id]
+        );
+      }
+      
+      res.json({ attended: true, message: '출석이 체크되었습니다.' });
+    }
+  } catch (error) {
+    console.error('출석 기록 토글 오류:', error);
+    res.status(500).json({ error: '출석 기록 처리에 실패했습니다.' });
+  }
+});
+
+// 이름으로 신규 출석자 추가
+app.post('/api/attendance/add-guest', async (req, res) => {
+  try {
+    const { event_id, name } = req.body;
+    
+    if (!event_id || !name || !name.trim()) {
+      return res.status(400).json({ error: '이벤트 ID와 이름은 필수입니다.' });
+    }
+
+    const connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    try {
+      // 이름으로 기존 멤버 검색
+      const [existingMembers] = await connection.execute(
+        'SELECT id FROM members WHERE name = ? LIMIT 1',
+        [name.trim()]
+      );
+
+      // 이벤트 정보 조회 (첫 출석 정보 저장용)
+      const [eventInfo] = await connection.execute(
+        'SELECT event_name, event_date FROM attendance_events WHERE id = ?',
+        [event_id]
+      );
+      const eventName = eventInfo[0]?.event_name || '';
+      let eventDate = eventInfo[0]?.event_date || new Date();
+      
+      // Date 객체를 MySQL DATE 형식으로 변환
+      if (eventDate instanceof Date) {
+        eventDate = eventDate.toISOString().split('T')[0];
+      } else if (typeof eventDate === 'string') {
+        // 이미 문자열이면 그대로 사용 (YYYY-MM-DD 형식)
+        eventDate = eventDate.split('T')[0];
+      }
+
+      let memberId;
+      let isNewMember = false;
+      
+      if (existingMembers.length > 0) {
+        // 기존 멤버가 있으면 그 ID 사용
+        memberId = existingMembers[0].id;
+        
+        // 기존 멤버의 첫 출석 정보 확인
+        const [memberData] = await connection.execute(
+          'SELECT is_new_member, first_attendance_date, first_attendance_event FROM members WHERE id = ?',
+          [memberId]
+        );
+        
+        // 첫 출석 정보가 없으면 현재 이벤트를 첫 출석으로 설정
+        if (memberData[0] && !memberData[0].first_attendance_date) {
+          const eventDateObj = new Date(eventDate);
+          const formattedDate = eventDateObj.toLocaleDateString('ko-KR', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+          });
+          const notesText = `첫 출석: ${eventName} (${formattedDate})`;
+          await connection.execute(
+            `UPDATE members 
+             SET is_new_member = TRUE, 
+                 first_attendance_date = ?, 
+                 first_attendance_event = ?,
+                 notes = CONCAT(COALESCE(notes, ''), IF(notes IS NULL OR notes = '', '', '\n'), ?)
+             WHERE id = ?`,
+            [eventDate, eventName, notesText, memberId]
+          );
+        }
+      } else {
+        // 신규 멤버 추가 (기본 정보 + 새신자 정보)
+        const eventDateObj = new Date(eventDate);
+        const formattedDate = eventDateObj.toLocaleDateString('ko-KR', { 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric' 
+        });
+        const notesText = `첫 출석: ${eventName} (${formattedDate})`;
+        const [result] = await connection.execute(
+          `INSERT INTO members (name, phone, active, is_new_member, first_attendance_date, first_attendance_event, notes) 
+           VALUES (?, ?, ?, TRUE, ?, ?, ?)`,
+          [name.trim(), '000-0000-0000', true, eventDate, eventName, notesText]
+        );
+        memberId = result.insertId;
+        isNewMember = true;
+      }
+
+      // 출석 기록 확인
+      const [existingRecord] = await connection.execute(
+        'SELECT id FROM attendance_records WHERE event_id = ? AND member_id = ?',
+        [event_id, memberId]
+      );
+
+      if (existingRecord.length === 0) {
+        // 출석 기록 추가
+        await connection.execute(
+          'INSERT INTO attendance_records (event_id, member_id) VALUES (?, ?)',
+          [event_id, memberId]
+        );
+      }
+
+      // 출석 횟수 확인 및 새신자 상태 업데이트
+      const [attendanceCount] = await connection.execute(
+        'SELECT COUNT(*) as count FROM attendance_records WHERE member_id = ?',
+        [memberId]
+      );
+      
+      const totalAttendance = attendanceCount[0].count;
+      
+      // 출석이 3회 이상이면 새신자 상태 해제
+      if (totalAttendance >= 3) {
+        await connection.execute(
+          'UPDATE members SET is_new_member = FALSE WHERE id = ? AND is_new_member = TRUE',
+          [memberId]
+        );
+      }
+
+      // 멤버 정보 조회 (is_new_member 포함)
+      const [memberInfo] = await connection.execute(
+        'SELECT id, name, phone, is_new_member FROM members WHERE id = ?',
+        [memberId]
+      );
+
+      await connection.commit();
+      
+      res.json({ 
+        member: memberInfo[0],
+        attended: true,
+        isNewMember: memberInfo[0].is_new_member || isNewMember,
+        message: '출석자가 추가되었습니다.' 
+      });
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error('신규 출석자 추가 오류:', error);
+    res.status(500).json({ error: '신규 출석자 추가에 실패했습니다.' });
+  }
+});
+
+// 출석부 이벤트 삭제
+app.delete('/api/attendance/events/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [result] = await pool.execute('DELETE FROM attendance_events WHERE id = ?', [id]);
+    
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: '이벤트를 찾을 수 없습니다.' });
+    }
+    
+    res.json({ message: '출석부 이벤트가 성공적으로 삭제되었습니다.' });
+  } catch (error) {
+    console.error('출석부 이벤트 삭제 오류:', error);
+    res.status(500).json({ error: '출석부 이벤트 삭제에 실패했습니다.' });
+  }
+});
+
 // React 앱 서빙 (프로덕션 빌드만)
 if (process.env.NODE_ENV === 'production') {
   app.get('*', (req, res) => {
