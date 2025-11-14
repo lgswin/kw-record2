@@ -7,16 +7,149 @@ const API_URL = process.env.NODE_ENV === 'production'
   ? '/api' 
   : (process.env.REACT_APP_API_URL || 'http://localhost:5001/api');
 
+// axios 기본 설정 (세션 쿠키를 위한 credentials)
+axios.defaults.withCredentials = true;
+
 function App() {
-  const [activeTab, setActiveTab] = useState('members');
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    checkAuth();
+  }, []);
+
+  const checkAuth = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/auth/me`, {
+        withCredentials: true
+      });
+      setUser(response.data.user);
+      // 로그인 성공 시 대시보드로 설정
+      setActiveTab('dashboard');
+    } catch (error) {
+      setUser(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogin = async (username, password) => {
+    try {
+      const response = await axios.post(`${API_URL}/auth/login`, {
+        username,
+        password
+      }, {
+        withCredentials: true
+      });
+      setUser(response.data.user);
+      // 로그인 성공 시 대시보드로 설정
+      setActiveTab('dashboard');
+      return { success: true };
+    } catch (error) {
+      return { 
+        success: false, 
+        error: error.response?.data?.error || '로그인에 실패했습니다.' 
+      };
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await axios.post(`${API_URL}/auth/logout`, {}, {
+        withCredentials: true
+      });
+      setUser(null);
+    } catch (error) {
+      console.error('로그아웃 오류:', error);
+    }
+  };
+
+  const handlePasswordChange = async (currentPassword, newPassword) => {
+    try {
+      const response = await axios.put(`${API_URL}/auth/change-password`, {
+        currentPassword,
+        newPassword
+      }, {
+        withCredentials: true
+      });
+      return { success: true, message: response.data.message };
+    } catch (error) {
+      return { 
+        success: false, 
+        error: error.response?.data?.error || '비밀번호 변경에 실패했습니다.' 
+      };
+    }
+  };
+
+  if (loading) {
+    return <div style={{ textAlign: 'center', padding: '40px' }}>로딩 중...</div>;
+  }
+
+  if (!user) {
+    return <LoginPage onLogin={handleLogin} />;
+  }
 
   return (
     <div className="App">
       <header className="App-header">
-        <h1>KW한인장로교회 관리 시스템</h1>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', position: 'relative' }}>
+          <div style={{ flex: 1 }}></div>
+          <img 
+            src="/logo.png" 
+            alt="KW한인장로교회" 
+            style={{ 
+              height: '50px', 
+              maxWidth: '300px',
+              objectFit: 'contain',
+              position: 'absolute',
+              left: '50%',
+              transform: 'translateX(-50%)'
+            }} 
+          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, justifyContent: 'flex-end' }}>
+            <span style={{ fontSize: '0.9em', opacity: 0.9 }}>
+              {user.name || user.username} ({user.role === 'admin' ? '관리자' : '일반사용자'})
+            </span>
+            <button 
+              onClick={() => setActiveTab('settings')}
+              style={{
+                padding: '8px 16px',
+                background: 'rgba(255,255,255,0.2)',
+                border: '1px solid rgba(255,255,255,0.3)',
+                borderRadius: '4px',
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: '0.9em'
+              }}
+            >
+              설정
+            </button>
+            <button 
+              onClick={handleLogout}
+              style={{
+                padding: '8px 16px',
+                background: 'rgba(255,255,255,0.2)',
+                border: '1px solid rgba(255,255,255,0.3)',
+                borderRadius: '4px',
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: '0.9em'
+              }}
+            >
+              로그아웃
+            </button>
+          </div>
+        </div>
       </header>
       
       <nav className="nav-tabs">
+        <button 
+          className={activeTab === 'dashboard' ? 'nav-tab active' : 'nav-tab'}
+          onClick={() => setActiveTab('dashboard')}
+        >
+          대시보드
+        </button>
         <button 
           className={activeTab === 'members' ? 'nav-tab active' : 'nav-tab'}
           onClick={() => setActiveTab('members')}
@@ -56,6 +189,8 @@ function App() {
       </nav>
 
       <main className="container">
+        {activeTab === 'dashboard' && <Dashboard />}
+        {activeTab === 'settings' && <SettingsPage user={user} onPasswordChange={handlePasswordChange} />}
         {activeTab === 'members' && <MemberManagement />}
         {activeTab === 'families' && <FamilyManagement />}
         {activeTab === 'parties' && <PartyManagement />}
@@ -63,6 +198,571 @@ function App() {
         {activeTab === 'organizations' && <OrganizationManagement />}
         {activeTab === 'attendance' && <AttendanceManagement />}
       </main>
+    </div>
+  );
+}
+
+// 로그인 페이지 컴포넌트
+function LoginPage({ onLogin }) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    const result = await onLogin(username, password);
+    
+    if (!result.success) {
+      setError(result.error);
+    }
+    
+    setLoading(false);
+  };
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+    }}>
+      <div style={{
+        background: 'white',
+        padding: '40px',
+        borderRadius: '10px',
+        boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
+        width: '100%',
+        maxWidth: '400px'
+      }}>
+        <h2 style={{
+          textAlign: 'center',
+          marginBottom: '30px',
+          color: '#2c3e50'
+        }}>
+          KW한인장로교회
+        </h2>
+        <h3 style={{
+          textAlign: 'center',
+          marginBottom: '30px',
+          color: '#666',
+          fontWeight: 'normal'
+        }}>
+          관리 시스템 로그인
+        </h3>
+        
+        {error && (
+          <div style={{
+            padding: '12px',
+            background: '#fee',
+            color: '#c33',
+            borderRadius: '4px',
+            marginBottom: '20px',
+            fontSize: '0.9em'
+          }}>
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit}>
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{
+              display: 'block',
+              marginBottom: '8px',
+              color: '#333',
+              fontWeight: '500'
+            }}>
+              사용자명
+            </label>
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+              style={{
+                width: '100%',
+                padding: '12px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '1em',
+                boxSizing: 'border-box'
+              }}
+              disabled={loading}
+            />
+          </div>
+
+          <div style={{ marginBottom: '30px' }}>
+            <label style={{
+              display: 'block',
+              marginBottom: '8px',
+              color: '#333',
+              fontWeight: '500'
+            }}>
+              비밀번호
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              style={{
+                width: '100%',
+                padding: '12px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '1em',
+                boxSizing: 'border-box'
+              }}
+              disabled={loading}
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              width: '100%',
+              padding: '12px',
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              fontSize: '1em',
+              fontWeight: 'bold',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.7 : 1
+            }}
+          >
+            {loading ? '로그인 중...' : '로그인'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// 설정 페이지 컴포넌트
+function SettingsPage({ user, onPasswordChange }) {
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+
+    // 유효성 검사
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setError('모든 필드를 입력해주세요.');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setError('새 비밀번호는 최소 6자 이상이어야 합니다.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setError('새 비밀번호와 확인 비밀번호가 일치하지 않습니다.');
+      return;
+    }
+
+    if (currentPassword === newPassword) {
+      setError('새 비밀번호는 현재 비밀번호와 다르게 설정해주세요.');
+      return;
+    }
+
+    setLoading(true);
+
+    const result = await onPasswordChange(currentPassword, newPassword);
+    
+    if (result.success) {
+      setSuccess(result.message);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } else {
+      setError(result.error);
+    }
+    
+    setLoading(false);
+  };
+
+  return (
+    <div style={{ padding: '20px 0' }}>
+      <h2 style={{ marginBottom: '30px', color: '#2c3e50' }}>설정</h2>
+      
+      <div style={{
+        background: 'white',
+        padding: '30px',
+        borderRadius: '10px',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+        maxWidth: '500px'
+      }}>
+        <h3 style={{ marginBottom: '20px', color: '#2c3e50' }}>비밀번호 변경</h3>
+        
+        {error && (
+          <div style={{
+            padding: '12px',
+            background: '#fee',
+            color: '#c33',
+            borderRadius: '4px',
+            marginBottom: '20px',
+            fontSize: '0.9em'
+          }}>
+            {error}
+          </div>
+        )}
+
+        {success && (
+          <div style={{
+            padding: '12px',
+            background: '#efe',
+            color: '#3c3',
+            borderRadius: '4px',
+            marginBottom: '20px',
+            fontSize: '0.9em'
+          }}>
+            {success}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit}>
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{
+              display: 'block',
+              marginBottom: '8px',
+              color: '#333',
+              fontWeight: '500'
+            }}>
+              현재 비밀번호
+            </label>
+            <input
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              required
+              style={{
+                width: '100%',
+                padding: '12px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '1em',
+                boxSizing: 'border-box'
+              }}
+              disabled={loading}
+            />
+          </div>
+
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{
+              display: 'block',
+              marginBottom: '8px',
+              color: '#333',
+              fontWeight: '500'
+            }}>
+              새 비밀번호
+            </label>
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              required
+              minLength={6}
+              style={{
+                width: '100%',
+                padding: '12px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '1em',
+                boxSizing: 'border-box'
+              }}
+              disabled={loading}
+            />
+            <div style={{ fontSize: '0.85em', color: '#666', marginTop: '5px' }}>
+              최소 6자 이상
+            </div>
+          </div>
+
+          <div style={{ marginBottom: '30px' }}>
+            <label style={{
+              display: 'block',
+              marginBottom: '8px',
+              color: '#333',
+              fontWeight: '500'
+            }}>
+              새 비밀번호 확인
+            </label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              minLength={6}
+              style={{
+                width: '100%',
+                padding: '12px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '1em',
+                boxSizing: 'border-box'
+              }}
+              disabled={loading}
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="btn btn-primary"
+            style={{
+              width: '100%',
+              padding: '12px',
+              fontSize: '1em',
+              fontWeight: 'bold',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.7 : 1
+            }}
+          >
+            {loading ? '변경 중...' : '비밀번호 변경'}
+          </button>
+        </form>
+
+        <div style={{
+          marginTop: '30px',
+          padding: '15px',
+          background: '#f5f5f5',
+          borderRadius: '4px',
+          fontSize: '0.85em',
+          color: '#666'
+        }}>
+          <div style={{ fontWeight: 'bold', marginBottom: '10px' }}>사용자 정보</div>
+          <div>사용자명: {user.username}</div>
+          <div>이름: {user.name || '-'}</div>
+          <div>이메일: {user.email || '-'}</div>
+          <div>권한: {user.role === 'admin' ? '관리자' : '일반사용자'}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// 대시보드 컴포넌트
+function Dashboard() {
+  const [stats, setStats] = useState({
+    totalMembers: 0,
+    newMembers: 0,
+    weeklyTrend: []
+  });
+  const [newMembersList, setNewMembersList] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    setLoading(true);
+    try {
+      const [statsResponse, newMembersResponse] = await Promise.all([
+        axios.get(`${API_URL}/dashboard/stats`),
+        axios.get(`${API_URL}/dashboard/new-members`)
+      ]);
+      
+      setStats(statsResponse.data);
+      setNewMembersList(newMembersResponse.data);
+    } catch (error) {
+      console.error('대시보드 데이터 조회 오류:', error);
+      alert('대시보드 데이터를 가져올 수 없습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return <div style={{ textAlign: 'center', padding: '40px' }}>로딩 중...</div>;
+  }
+
+  // 출석율 추이 차트의 최대값 계산
+  const maxAttendanceRate = Math.max(
+    ...stats.weeklyTrend.map(w => parseFloat(w.attendanceRate)),
+    100
+  );
+
+  return (
+    <div style={{ padding: '20px 0' }}>
+      <h2 style={{ marginBottom: '30px', color: '#2c3e50' }}>대시보드</h2>
+      
+      {/* 통계 카드 */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+        gap: '20px',
+        marginBottom: '30px'
+      }}>
+        <div style={{
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          padding: '30px',
+          borderRadius: '10px',
+          color: 'white',
+          boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+        }}>
+          <div style={{ fontSize: '0.9em', opacity: 0.9, marginBottom: '10px' }}>전체 교인수</div>
+          <div style={{ fontSize: '2.5em', fontWeight: 'bold' }}>{stats.totalMembers}</div>
+          <div style={{ fontSize: '0.85em', opacity: 0.8, marginTop: '5px' }}>활성 멤버</div>
+        </div>
+        
+        <div style={{
+          background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+          padding: '30px',
+          borderRadius: '10px',
+          color: 'white',
+          boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+        }}>
+          <div style={{ fontSize: '0.9em', opacity: 0.9, marginBottom: '10px' }}>새신자 수</div>
+          <div style={{ fontSize: '2.5em', fontWeight: 'bold' }}>{stats.newMembers}</div>
+          <div style={{ fontSize: '0.85em', opacity: 0.8, marginTop: '5px' }}>
+            {stats.totalMembers > 0 
+              ? ((stats.newMembers / stats.totalMembers) * 100).toFixed(1) + '%'
+              : '0%'}
+          </div>
+        </div>
+      </div>
+
+      {/* 출석율 추이 */}
+      <div style={{
+        background: 'white',
+        padding: '30px',
+        borderRadius: '10px',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+        marginBottom: '30px'
+      }}>
+        <h3 style={{ marginBottom: '20px', color: '#2c3e50' }}>출석율 추이 (최근 8주)</h3>
+        {stats.weeklyTrend.length > 0 ? (
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '15px', height: '300px', padding: '20px 0' }}>
+            {stats.weeklyTrend.map((week, index) => {
+              const height = (parseFloat(week.attendanceRate) / maxAttendanceRate) * 100;
+              return (
+                <div key={index} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <div style={{
+                    width: '100%',
+                    height: `${height}%`,
+                    minHeight: '20px',
+                    background: 'linear-gradient(to top, #667eea, #764ba2)',
+                    borderRadius: '4px 4px 0 0',
+                    marginBottom: '10px',
+                    position: 'relative',
+                    display: 'flex',
+                    alignItems: 'flex-end',
+                    justifyContent: 'center',
+                    padding: '5px'
+                  }}>
+                    <span style={{
+                      color: 'white',
+                      fontSize: '0.85em',
+                      fontWeight: 'bold',
+                      textShadow: '0 1px 2px rgba(0,0,0,0.3)'
+                    }}>
+                      {week.attendanceRate}%
+                    </span>
+                  </div>
+                  <div style={{
+                    fontSize: '0.75em',
+                    color: '#666',
+                    textAlign: 'center',
+                    transform: 'rotate(-45deg)',
+                    transformOrigin: 'center',
+                    whiteSpace: 'nowrap',
+                    marginTop: '10px'
+                  }}>
+                    {week.weekLabel}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
+            출석 데이터가 없습니다.
+          </div>
+        )}
+      </div>
+
+      {/* 매주 새신자 명단 */}
+      <div style={{
+        background: 'white',
+        padding: '30px',
+        borderRadius: '10px',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
+      }}>
+        <h3 style={{ marginBottom: '20px', color: '#2c3e50' }}>매주 새신자 명단 (최근 8주)</h3>
+        {newMembersList.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            {newMembersList.map((week, index) => (
+              <div key={index} style={{
+                border: '1px solid #e0e0e0',
+                borderRadius: '8px',
+                padding: '20px',
+                background: '#f9f9f9'
+              }}>
+                <div style={{
+                  fontSize: '1.1em',
+                  fontWeight: 'bold',
+                  color: '#667eea',
+                  marginBottom: '15px',
+                  paddingBottom: '10px',
+                  borderBottom: '2px solid #667eea'
+                }}>
+                  {week.weekLabel} ({week.members.length}명)
+                </div>
+                {week.members.length > 0 ? (
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                    gap: '10px'
+                  }}>
+                    {week.members.map(member => (
+                      <div key={member.id} style={{
+                        padding: '12px',
+                        background: 'white',
+                        borderRadius: '6px',
+                        border: '1px solid #e0e0e0',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                      }}>
+                        <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>{member.name}</div>
+                        <div style={{ fontSize: '0.85em', color: '#666' }}>
+                          {member.phone}
+                        </div>
+                        {member.attendanceEvent && (
+                          <div style={{ fontSize: '0.8em', color: '#999', marginTop: '5px' }}>
+                            첫 출석: {member.attendanceEvent}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ color: '#999', textAlign: 'center', padding: '20px' }}>
+                    해당 주에 새신자가 없습니다.
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
+            최근 8주간 새신자가 없습니다.
+          </div>
+        )}
+      </div>
     </div>
   );
 }

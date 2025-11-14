@@ -2,14 +2,35 @@ const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const session = require('express-session');
+const bcrypt = require('bcrypt');
 const config = require('./config');
 const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
 
+// 세션 설정
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'kw-church-secret-key-change-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production', // HTTPS에서만 쿠키 전송
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000 // 24시간
+  }
+}));
+
+// CORS 설정 (세션 쿠키를 위한 credentials 허용)
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production' 
+    ? false // 프로덕션에서는 정적 파일 서빙 사용
+    : 'http://localhost:3000',
+  credentials: true
+}));
+
 // 미들웨어 설정
-app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
@@ -28,6 +49,299 @@ const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0
+});
+
+// 인증 미들웨어
+const requireAuth = (req, res, next) => {
+  if (req.session && req.session.user) {
+    return next();
+  }
+  res.status(401).json({ error: '인증이 필요합니다.' });
+};
+
+// 관리자 권한 미들웨어
+const requireAdmin = (req, res, next) => {
+  if (req.session && req.session.user && req.session.user.role === 'admin') {
+    return next();
+  }
+  res.status(403).json({ error: '관리자 권한이 필요합니다.' });
+};
+
+// ==================== 인증 API ====================
+// 로그인
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    
+    if (!username || !password) {
+      return res.status(400).json({ error: '사용자명과 비밀번호를 입력해주세요.' });
+    }
+    
+    // 사용자 조회
+    const [users] = await pool.execute(
+      'SELECT id, username, password, role, name, email, active FROM users WHERE username = ?',
+      [username]
+    );
+    
+    if (users.length === 0) {
+      return res.status(401).json({ error: '사용자명 또는 비밀번호가 올바르지 않습니다.' });
+    }
+    
+    const user = users[0];
+    
+    // 비활성 사용자 체크
+    if (!user.active) {
+      return res.status(403).json({ error: '비활성화된 계정입니다.' });
+    }
+    
+    // 비밀번호 확인
+    const passwordMatch = await bcrypt.compare(password, user.password);
+    
+    if (!passwordMatch) {
+      return res.status(401).json({ error: '사용자명 또는 비밀번호가 올바르지 않습니다.' });
+    }
+    
+    // 세션에 사용자 정보 저장
+    req.session.user = {
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      name: user.name,
+      email: user.email
+    };
+    
+    res.json({
+      message: '로그인 성공',
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        name: user.name,
+        email: user.email
+      }
+    });
+  } catch (error) {
+    console.error('로그인 오류:', error);
+    res.status(500).json({ error: '로그인 처리 중 오류가 발생했습니다.' });
+  }
+});
+
+// 로그아웃
+app.post('/api/auth/logout', (req, res) => {
+  req.session.destroy((err) => {
+    if (err) {
+      console.error('로그아웃 오류:', err);
+      return res.status(500).json({ error: '로그아웃 처리 중 오류가 발생했습니다.' });
+    }
+    res.json({ message: '로그아웃되었습니다.' });
+  });
+});
+
+// 현재 사용자 정보 조회
+app.get('/api/auth/me', (req, res) => {
+  if (req.session && req.session.user) {
+    res.json({ user: req.session.user });
+  } else {
+    res.status(401).json({ error: '로그인이 필요합니다.' });
+  }
+});
+
+// 비밀번호 변경 (현재 사용자)
+app.put('/api/auth/change-password', requireAuth, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: '현재 비밀번호와 새 비밀번호를 입력해주세요.' });
+    }
+    
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: '새 비밀번호는 최소 6자 이상이어야 합니다.' });
+    }
+    
+    // 현재 사용자 정보 조회
+    const [users] = await pool.execute(
+      'SELECT id, password FROM users WHERE id = ?',
+      [req.session.user.id]
+    );
+    
+    if (users.length === 0) {
+      return res.status(404).json({ error: '사용자를 찾을 수 없습니다.' });
+    }
+    
+    const user = users[0];
+    
+    // 현재 비밀번호 확인
+    const passwordMatch = await bcrypt.compare(currentPassword, user.password);
+    
+    if (!passwordMatch) {
+      return res.status(401).json({ error: '현재 비밀번호가 올바르지 않습니다.' });
+    }
+    
+    // 새 비밀번호 해싱
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    
+    // 비밀번호 업데이트
+    await pool.execute(
+      'UPDATE users SET password = ? WHERE id = ?',
+      [hashedPassword, req.session.user.id]
+    );
+    
+    res.json({ message: '비밀번호가 성공적으로 변경되었습니다.' });
+  } catch (error) {
+    console.error('비밀번호 변경 오류:', error);
+    res.status(500).json({ error: '비밀번호 변경에 실패했습니다.' });
+  }
+});
+
+// 사용자 목록 조회 (관리자만)
+app.get('/api/users', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const [users] = await pool.execute(
+      'SELECT id, username, role, name, email, active, created_at, updated_at FROM users ORDER BY created_at DESC'
+    );
+    res.json(users);
+  } catch (error) {
+    console.error('사용자 목록 조회 오류:', error);
+    res.status(500).json({ error: '사용자 목록을 가져올 수 없습니다.' });
+  }
+});
+
+// 사용자 생성 (관리자만)
+app.post('/api/users', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { username, password, role, name, email } = req.body;
+    
+    if (!username || !password) {
+      return res.status(400).json({ error: '사용자명과 비밀번호는 필수입니다.' });
+    }
+    
+    // 중복 확인
+    const [existing] = await pool.execute(
+      'SELECT id FROM users WHERE username = ?',
+      [username]
+    );
+    
+    if (existing.length > 0) {
+      return res.status(400).json({ error: '이미 존재하는 사용자명입니다.' });
+    }
+    
+    // 비밀번호 해싱
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    // 사용자 생성
+    const [result] = await pool.execute(
+      'INSERT INTO users (username, password, role, name, email) VALUES (?, ?, ?, ?, ?)',
+      [username, hashedPassword, role || 'user', name || null, email || null]
+    );
+    
+    res.status(201).json({
+      id: result.insertId,
+      username,
+      role: role || 'user',
+      name,
+      email,
+      message: '사용자가 생성되었습니다.'
+    });
+  } catch (error) {
+    console.error('사용자 생성 오류:', error);
+    res.status(500).json({ error: '사용자 생성에 실패했습니다.' });
+  }
+});
+
+// 사용자 수정 (관리자만)
+app.put('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { username, password, role, name, email, active } = req.body;
+    
+    // 기존 사용자 확인
+    const [existing] = await pool.execute('SELECT id FROM users WHERE id = ?', [id]);
+    if (existing.length === 0) {
+      return res.status(404).json({ error: '사용자를 찾을 수 없습니다.' });
+    }
+    
+    let updateFields = [];
+    let updateValues = [];
+    
+    if (username) {
+      // 중복 확인
+      const [duplicate] = await pool.execute(
+        'SELECT id FROM users WHERE username = ? AND id != ?',
+        [username, id]
+      );
+      if (duplicate.length > 0) {
+        return res.status(400).json({ error: '이미 존재하는 사용자명입니다.' });
+      }
+      updateFields.push('username = ?');
+      updateValues.push(username);
+    }
+    
+    if (password) {
+      const hashedPassword = await bcrypt.hash(password, 10);
+      updateFields.push('password = ?');
+      updateValues.push(hashedPassword);
+    }
+    
+    if (role) {
+      updateFields.push('role = ?');
+      updateValues.push(role);
+    }
+    
+    if (name !== undefined) {
+      updateFields.push('name = ?');
+      updateValues.push(name);
+    }
+    
+    if (email !== undefined) {
+      updateFields.push('email = ?');
+      updateValues.push(email);
+    }
+    
+    if (active !== undefined) {
+      updateFields.push('active = ?');
+      updateValues.push(active);
+    }
+    
+    if (updateFields.length === 0) {
+      return res.status(400).json({ error: '수정할 정보가 없습니다.' });
+    }
+    
+    updateValues.push(id);
+    
+    await pool.execute(
+      `UPDATE users SET ${updateFields.join(', ')} WHERE id = ?`,
+      updateValues
+    );
+    
+    res.json({ message: '사용자 정보가 수정되었습니다.' });
+  } catch (error) {
+    console.error('사용자 수정 오류:', error);
+    res.status(500).json({ error: '사용자 수정에 실패했습니다.' });
+  }
+});
+
+// 사용자 삭제 (관리자만)
+app.delete('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // 자기 자신 삭제 방지
+    if (req.session.user.id === parseInt(id)) {
+      return res.status(400).json({ error: '자기 자신을 삭제할 수 없습니다.' });
+    }
+    
+    const [result] = await pool.execute('DELETE FROM users WHERE id = ?', [id]);
+    
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: '사용자를 찾을 수 없습니다.' });
+    }
+    
+    res.json({ message: '사용자가 삭제되었습니다.' });
+  } catch (error) {
+    console.error('사용자 삭제 오류:', error);
+    res.status(500).json({ error: '사용자 삭제에 실패했습니다.' });
+  }
 });
 
 // 모든 성도 조회 (관계 정보 포함)
@@ -976,6 +1290,169 @@ app.post('/api/offices', async (req, res) => {
     res.status(500).json({ error: '직분 추가에 실패했습니다.' });
   }
 });
+
+// ==================== 대시보드 API ====================
+// 대시보드 통계 조회
+app.get('/api/dashboard/stats', async (req, res) => {
+  try {
+    // 전체 교인수 (활성 멤버)
+    const [totalMembers] = await pool.execute(
+      'SELECT COUNT(*) as count FROM members WHERE active = 1'
+    );
+    
+    // 새신자 수
+    const [newMembers] = await pool.execute(
+      'SELECT COUNT(*) as count FROM members WHERE active = 1 AND is_new_member = TRUE'
+    );
+    
+    // 전체 활성 멤버 수 조회
+    const [totalMembersCount] = await pool.execute(
+      'SELECT COUNT(*) as count FROM members WHERE active = 1'
+    );
+    const totalActiveMembers = totalMembersCount[0].count;
+    
+    // 최근 8주간 출석 이벤트 조회
+    const [attendanceEvents] = await pool.execute(`
+      SELECT 
+        ae.id,
+        DATE_FORMAT(ae.event_date, '%Y-%m-%d') as date,
+        ae.event_name,
+        (SELECT COUNT(*) FROM attendance_records WHERE event_id = ae.id) as attendance_count
+      FROM attendance_events ae
+      WHERE ae.event_date >= DATE_SUB(NOW(), INTERVAL 8 WEEK)
+      ORDER BY ae.event_date DESC
+    `);
+    
+    // 주별 출석율 계산
+    const weeklyAttendance = {};
+    attendanceEvents.forEach(event => {
+      const weekStart = getWeekStartDate(new Date(event.date));
+      const weekKey = weekStart.toISOString().split('T')[0];
+      
+      if (!weeklyAttendance[weekKey]) {
+        weeklyAttendance[weekKey] = {
+          week: weekStart,
+          totalEvents: 0,
+          totalAttendance: 0,
+          totalMembers: totalActiveMembers,
+          events: []
+        };
+      }
+      
+      weeklyAttendance[weekKey].totalEvents += 1;
+      weeklyAttendance[weekKey].totalAttendance += parseInt(event.attendance_count) || 0;
+      weeklyAttendance[weekKey].events.push({
+        date: event.date,
+        eventName: event.event_name,
+        attendance: parseInt(event.attendance_count) || 0
+      });
+    });
+    
+    // 주별 출석율 계산 (주별 평균 출석율)
+    const weeklyTrend = Object.values(weeklyAttendance)
+      .map(week => {
+        // 주별 평균 출석율 = (주별 총 출석 수) / (이벤트 수 * 전체 멤버 수) * 100
+        const attendanceRate = week.totalMembers > 0 && week.totalEvents > 0
+          ? ((week.totalAttendance / (week.totalEvents * week.totalMembers)) * 100).toFixed(1)
+          : 0;
+        
+        return {
+          week: week.week.toISOString().split('T')[0],
+          weekLabel: formatWeekLabel(week.week),
+          attendanceRate: attendanceRate,
+          totalAttendance: week.totalAttendance,
+          totalEvents: week.totalEvents,
+          totalMembers: week.totalMembers
+        };
+      })
+      .sort((a, b) => new Date(a.week) - new Date(b.week))
+      .slice(-8); // 최근 8주
+    
+    res.json({
+      totalMembers: totalMembers[0].count,
+      newMembers: newMembers[0].count,
+      weeklyTrend: weeklyTrend
+    });
+  } catch (error) {
+    console.error('대시보드 통계 조회 오류:', error);
+    res.status(500).json({ error: '대시보드 통계를 가져올 수 없습니다.' });
+  }
+});
+
+// 주 시작일 계산 헬퍼 함수
+function getWeekStartDate(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // 월요일 기준
+  return new Date(d.setDate(diff));
+}
+
+// 주 레이블 포맷팅
+function formatWeekLabel(date) {
+  const d = new Date(date);
+  const month = d.getMonth() + 1;
+  const day = d.getDate();
+  return `${month}/${day}주`;
+}
+
+// 매주 새신자 명단 조회
+app.get('/api/dashboard/new-members', async (req, res) => {
+  try {
+    // 최근 8주간 주별 새신자 명단
+    const [newMembersList] = await pool.execute(`
+      SELECT 
+        m.id,
+        m.name,
+        m.phone,
+        m.first_attendance_date,
+        m.first_attendance_event,
+        DATE_FORMAT(m.first_attendance_date, '%Y-%m-%d') as attendance_date,
+        YEARWEEK(m.first_attendance_date, 1) as week_key
+      FROM members m
+      WHERE m.active = 1 
+        AND m.is_new_member = TRUE
+        AND m.first_attendance_date >= DATE_SUB(NOW(), INTERVAL 8 WEEK)
+      ORDER BY m.first_attendance_date DESC
+    `);
+    
+    // 주별로 그룹화
+    const weeklyNewMembers = {};
+    newMembersList.forEach(member => {
+      const weekKey = member.week_key;
+      if (!weeklyNewMembers[weekKey]) {
+        weeklyNewMembers[weekKey] = {
+          weekKey: weekKey,
+          weekLabel: formatWeekFromKey(member.week_key),
+          members: []
+        };
+      }
+      weeklyNewMembers[weekKey].members.push({
+        id: member.id,
+        name: member.name,
+        phone: member.phone,
+        attendanceDate: member.attendance_date,
+        attendanceEvent: member.first_attendance_event
+      });
+    });
+    
+    // 주별로 정렬 (최신순)
+    const result = Object.values(weeklyNewMembers)
+      .sort((a, b) => b.weekKey - a.weekKey)
+      .slice(0, 8); // 최근 8주
+    
+    res.json(result);
+  } catch (error) {
+    console.error('새신자 명단 조회 오류:', error);
+    res.status(500).json({ error: '새신자 명단을 가져올 수 없습니다.' });
+  }
+});
+
+// 주 키에서 주 레이블 생성
+function formatWeekFromKey(weekKey) {
+  const year = Math.floor(weekKey / 100);
+  const week = weekKey % 100;
+  return `${year}년 ${week}주`;
+}
 
 // ==================== 출석부 API ====================
 // 모든 출석부 이벤트 조회
