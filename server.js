@@ -13,13 +13,16 @@ const PORT = process.env.PORT || 5001;
 // 세션 설정
 app.use(session({
   secret: process.env.SESSION_SECRET || 'kw-church-secret-key-change-in-production',
-  resave: false,
+  resave: true, // 세션을 매 요청마다 다시 저장하여 만료 시간 갱신
   saveUninitialized: false,
+  rolling: true, // 사용자가 활동할 때마다 세션 만료 시간 갱신
   cookie: {
-    secure: process.env.NODE_ENV === 'production', // HTTPS에서만 쿠키 전송
+    secure: false, // HTTP에서도 쿠키 전송 (HTTPS 사용 시 true로 변경)
     httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000 // 24시간
-  }
+    sameSite: 'lax', // CSRF 보호 및 모바일 브라우저 호환성
+    maxAge: 7 * 24 * 60 * 60 * 1000 // 7일 (604800000ms)
+  },
+  name: 'kwchurch.sid' // 세션 쿠키 이름
 }));
 
 // CORS 설정 (세션 쿠키를 위한 credentials 허용)
@@ -140,6 +143,8 @@ app.post('/api/auth/logout', (req, res) => {
 // 현재 사용자 정보 조회
 app.get('/api/auth/me', (req, res) => {
   if (req.session && req.session.user) {
+    // 세션 갱신 (rolling 옵션과 함께 사용하여 만료 시간 연장)
+    req.session.touch();
     res.json({ user: req.session.user });
   } else {
     res.status(401).json({ error: '로그인이 필요합니다.' });

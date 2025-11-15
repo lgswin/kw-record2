@@ -17,6 +17,23 @@ function App() {
 
   useEffect(() => {
     checkAuth();
+    
+    // 주기적으로 세션 체크 (5분마다)
+    const interval = setInterval(() => {
+      checkAuth();
+    }, 5 * 60 * 1000); // 5분
+    
+    // 페이지 포커스 시 세션 체크 (모바일에서 앱으로 돌아올 때)
+    const handleFocus = () => {
+      checkAuth();
+    };
+    
+    window.addEventListener('focus', handleFocus);
+    
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, []);
 
   const checkAuth = async () => {
@@ -24,11 +41,21 @@ function App() {
       const response = await axios.get(`${API_URL}/auth/me`, {
         withCredentials: true
       });
-      setUser(response.data.user);
-      // 로그인 성공 시 대시보드로 설정
-      setActiveTab('dashboard');
+      if (response.data && response.data.user) {
+        setUser(response.data.user);
+        // 로그인 성공 시 대시보드로 설정 (처음 로드 시에만)
+        if (activeTab === 'dashboard' || !activeTab) {
+          setActiveTab('dashboard');
+        }
+      } else {
+        setUser(null);
+      }
     } catch (error) {
-      setUser(null);
+      // 401 (Unauthorized) 오류만 로그아웃 처리
+      if (error.response && error.response.status === 401) {
+        setUser(null);
+      }
+      // 다른 오류는 무시 (네트워크 오류 등)
     } finally {
       setLoading(false);
     }
@@ -93,21 +120,17 @@ function App() {
   return (
     <div className="App">
       <header className="App-header">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', position: 'relative' }}>
-          <div style={{ flex: 1 }}></div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
           <img 
             src="/logo.png" 
             alt="KW한인장로교회" 
             style={{ 
               height: '50px', 
               maxWidth: '300px',
-              objectFit: 'contain',
-              position: 'absolute',
-              left: '50%',
-              transform: 'translateX(-50%)'
+              objectFit: 'contain'
             }} 
           />
-          <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flex: 1, justifyContent: 'flex-end' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
             <span style={{ fontSize: '0.9em', opacity: 0.9 }}>
               {user.name || user.username} ({user.role === 'admin' ? '관리자' : '일반사용자'})
             </span>
