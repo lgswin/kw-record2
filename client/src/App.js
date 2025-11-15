@@ -15,17 +15,19 @@ function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+
   useEffect(() => {
-    checkAuth();
+    checkAuth(true); // 초기 로드
     
     // 주기적으로 세션 체크 (5분마다)
     const interval = setInterval(() => {
-      checkAuth();
+      checkAuth(false); // 주기적 체크는 탭 변경 안 함
     }, 5 * 60 * 1000); // 5분
     
     // 페이지 포커스 시 세션 체크 (모바일에서 앱으로 돌아올 때)
     const handleFocus = () => {
-      checkAuth();
+      checkAuth(false); // 포커스 시에도 탭 변경 안 함
     };
     
     window.addEventListener('focus', handleFocus);
@@ -34,18 +36,20 @@ function App() {
       clearInterval(interval);
       window.removeEventListener('focus', handleFocus);
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // checkAuth는 컴포넌트 내부 함수이므로 의존성에서 제외
 
-  const checkAuth = async () => {
+  const checkAuth = async (isInitial = false) => {
     try {
       const response = await axios.get(`${API_URL}/auth/me`, {
         withCredentials: true
       });
       if (response.data && response.data.user) {
         setUser(response.data.user);
-        // 로그인 성공 시 대시보드로 설정 (처음 로드 시에만)
-        if (activeTab === 'dashboard' || !activeTab) {
+        // 초기 로드 시에만 대시보드로 설정
+        if (isInitial && isInitialLoad) {
           setActiveTab('dashboard');
+          setIsInitialLoad(false);
         }
       } else {
         setUser(null);
@@ -57,7 +61,9 @@ function App() {
       }
       // 다른 오류는 무시 (네트워크 오류 등)
     } finally {
-      setLoading(false);
+      if (isInitial) {
+        setLoading(false);
+      }
     }
   };
 
@@ -70,6 +76,7 @@ function App() {
         withCredentials: true
       });
       setUser(response.data.user);
+      setIsInitialLoad(false);
       // 로그인 성공 시 대시보드로 설정
       setActiveTab('dashboard');
       return { success: true };
@@ -583,7 +590,8 @@ function Dashboard() {
   const [stats, setStats] = useState({
     totalMembers: 0,
     newMembers: 0,
-    weeklyTrend: []
+    weeklyTrend: [],
+    averageAttendance4Weeks: 0
   });
   const [newMembersList, setNewMembersList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -602,6 +610,9 @@ function Dashboard() {
       
       setStats(statsResponse.data);
       setNewMembersList(newMembersResponse.data);
+      
+      // 디버깅: 데이터 확인
+      console.log('대시보드 데이터:', statsResponse.data);
     } catch (error) {
       console.error('대시보드 데이터 조회 오류:', error);
       alert('대시보드 데이터를 가져올 수 없습니다.');
@@ -622,8 +633,6 @@ function Dashboard() {
 
   return (
     <div style={{ padding: '20px 0' }}>
-      <h2 style={{ marginBottom: '30px', color: '#2c3e50' }}>대시보드</h2>
-      
       {/* 통계 카드 */}
       <div style={{
         display: 'grid',
@@ -641,6 +650,18 @@ function Dashboard() {
           <div style={{ fontSize: '0.9em', opacity: 0.9, marginBottom: '10px' }}>전체 교인수</div>
           <div style={{ fontSize: '2.5em', fontWeight: 'bold' }}>{stats.totalMembers}</div>
           <div style={{ fontSize: '0.85em', opacity: 0.8, marginTop: '5px' }}>활성 멤버</div>
+        </div>
+        
+        <div style={{
+          background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+          padding: '30px',
+          borderRadius: '10px',
+          color: 'white',
+          boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+        }}>
+          <div style={{ fontSize: '0.9em', opacity: 0.9, marginBottom: '10px' }}>최근 4주간 평균 출석교인수</div>
+          <div style={{ fontSize: '2.5em', fontWeight: 'bold' }}>{stats.averageAttendance4Weeks}</div>
+          <div style={{ fontSize: '0.85em', opacity: 0.8, marginTop: '5px' }}>명</div>
         </div>
         
         <div style={{
@@ -3843,21 +3864,51 @@ function AttendanceManagement() {
   const [searchQuery, setSearchQuery] = useState('');
   const [eventFormData, setEventFormData] = useState({
     event_name: '',
-    event_date: new Date().toISOString().slice(0, 16) // YYYY-MM-DDTHH:mm 형식
+    event_date: new Date().toISOString().slice(0, 16), // YYYY-MM-DDTHH:mm 형식
+    creator_id: null
   });
+  const [allMembers, setAllMembers] = useState([]);
+  const [creatorSearchInput, setCreatorSearchInput] = useState('');
+  const [showCreatorDropdown, setShowCreatorDropdown] = useState(false);
 
   useEffect(() => {
     if (!selectedEvent) {
       fetchEvents();
     }
-  }, [selectedEvent]);
+    // 모든 성도 목록 가져오기 (작성자 검색용)
+    fetchAllMembers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedEvent]); // fetchEvents와 fetchAllMembers는 의존성에서 제외 (무한 루프 방지)
 
   useEffect(() => {
-    if (selectedEvent) {
+    if (selectedEvent && selectedEvent.id) {
       fetchAttendance(selectedEvent.id);
       setSearchQuery(''); // 이벤트 변경 시 검색어 초기화
     }
-  }, [selectedEvent]);
+  }, [selectedEvent?.id]); // selectedEvent.id만 의존성으로 사용
+
+  // 외부 클릭 시 작성자 드롭다운 닫기
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!event.target.closest('.autocomplete-container')) {
+        setShowCreatorDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const fetchAllMembers = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/members`);
+      setAllMembers(response.data || []);
+    } catch (error) {
+      console.error('성도 목록 조회 오류:', error);
+    }
+  };
 
   const fetchEvents = async () => {
     try {
@@ -3873,6 +3924,7 @@ function AttendanceManagement() {
     setLoading(true);
     try {
       const response = await axios.get(`${API_URL}/attendance/events/${eventId}`);
+      // 멤버 목록만 업데이트 (이벤트 정보는 handleEventSelect에서 이미 설정됨)
       setMembers(response.data.allMembers || []);
     } catch (error) {
       console.error('출석부 조회 오류:', error);
@@ -3885,8 +3937,11 @@ function AttendanceManagement() {
   const handleNewEvent = () => {
     setEventFormData({
       event_name: '',
-      event_date: new Date().toISOString().slice(0, 16)
+      event_date: new Date().toISOString().slice(0, 16),
+      creator_id: null
     });
+    setCreatorSearchInput('');
+    setShowCreatorDropdown(false);
     setShowEventForm(true);
   };
 
@@ -3901,15 +3956,42 @@ function AttendanceManagement() {
       await axios.post(`${API_URL}/attendance/events`, eventFormData);
       alert('출석부 이벤트가 생성되었습니다.');
       setShowEventForm(false);
+      setCreatorSearchInput('');
+      setShowCreatorDropdown(false);
       fetchEvents();
     } catch (error) {
       console.error('이벤트 생성 오류:', error);
-      alert('이벤트 생성에 실패했습니다.');
+      alert(error.response?.data?.error || '이벤트 생성에 실패했습니다.');
     }
   };
 
-  const handleEventSelect = (event) => {
-    setSelectedEvent(event);
+  // 작성자 검색 필터링
+  const filteredCreatorMembers = allMembers.filter(member => {
+    if (!creatorSearchInput.trim()) return false;
+    const keyword = creatorSearchInput.toLowerCase();
+    return member.name && member.name.toLowerCase().includes(keyword);
+  });
+
+  const handleCreatorSelect = (member) => {
+    setEventFormData({ ...eventFormData, creator_id: member.id });
+    setCreatorSearchInput(member.name);
+    setShowCreatorDropdown(false);
+  };
+
+  const handleEventSelect = async (event) => {
+    // 이벤트 선택 시 작성자 정보를 포함한 전체 정보 가져오기
+    try {
+      const response = await axios.get(`${API_URL}/attendance/events/${event.id}`);
+      if (response.data.event) {
+        setSelectedEvent(response.data.event);
+      } else {
+        setSelectedEvent(event);
+      }
+    } catch (error) {
+      console.error('이벤트 정보 조회 오류:', error);
+      // 오류 시 기본 이벤트 정보라도 설정
+      setSelectedEvent(event);
+    }
   };
 
   const handleBackToList = () => {
@@ -4070,6 +4152,7 @@ function AttendanceManagement() {
           <div style={{ color: '#666', fontSize: '0.95em' }}>
             {formatDateTime(selectedEvent.event_date)} | 
             출석: {members.filter(m => m.attended).length}명 / 전체: {members.length}명
+            {selectedEvent.creator_name && ` (작성자: ${selectedEvent.creator_name})`}
           </div>
         </div>
 
@@ -4267,6 +4350,57 @@ function AttendanceManagement() {
                 required
               />
             </div>
+            <div className="form-group">
+              <label>작성자 (선택사항)</label>
+              <div className="autocomplete-container" style={{ position: 'relative' }}>
+                <input
+                  type="text"
+                  value={creatorSearchInput}
+                  onChange={(e) => {
+                    setCreatorSearchInput(e.target.value);
+                    setShowCreatorDropdown(true);
+                  }}
+                  onFocus={() => {
+                    if (creatorSearchInput.trim()) {
+                      setShowCreatorDropdown(true);
+                    }
+                  }}
+                  placeholder="작성자 이름을 입력하세요"
+                  style={{ width: '100%' }}
+                />
+                {showCreatorDropdown && filteredCreatorMembers.length > 0 && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    backgroundColor: 'white',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    maxHeight: '200px',
+                    overflowY: 'auto',
+                    zIndex: 1000,
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                  }}>
+                    {filteredCreatorMembers.slice(0, 10).map(member => (
+                      <div
+                        key={member.id}
+                        onClick={() => handleCreatorSelect(member)}
+                        style={{
+                          padding: '10px',
+                          cursor: 'pointer',
+                          borderBottom: '1px solid #eee'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                      >
+                        {member.name} {member.phone ? `(${member.phone})` : ''}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
             <div className="form-actions">
               <button type="submit" className="btn btn-primary">생성</button>
               <button type="button" className="btn btn-secondary" onClick={() => setShowEventForm(false)}>
@@ -4317,6 +4451,11 @@ function AttendanceManagement() {
                 <div style={{ fontSize: '0.95em', color: '#666', marginBottom: '8px' }}>
                   {formatDateTime(event.event_date)}
                 </div>
+                {event.creator_name && (
+                  <div style={{ fontSize: '0.85em', color: '#888', marginBottom: '5px' }}>
+                    작성자: {event.creator_name}
+                  </div>
+                )}
                 <div style={{ fontSize: '0.9em', color: '#999', marginBottom: '10px' }}>
                   출석: {event.attendance_count || 0}명
                 </div>

@@ -1373,10 +1373,36 @@ app.get('/api/dashboard/stats', async (req, res) => {
       .sort((a, b) => new Date(a.week) - new Date(b.week))
       .slice(-8); // 최근 8주
     
+    // 최근 4주간 평균 출석교인수 계산 (직접 이벤트 데이터에서 계산)
+    const fourWeeksAgo = new Date();
+    fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28); // 4주 = 28일
+    
+    const [recentEvents] = await pool.execute(`
+      SELECT 
+        ae.id,
+        (SELECT COUNT(*) FROM attendance_records WHERE event_id = ae.id) as attendance_count
+      FROM attendance_events ae
+      WHERE ae.event_date >= ?
+      ORDER BY ae.event_date DESC
+    `, [fourWeeksAgo]);
+    
+    let totalAttendanceCount = 0;
+    let eventCount = recentEvents.length;
+    
+    recentEvents.forEach(event => {
+      totalAttendanceCount += parseInt(event.attendance_count) || 0;
+    });
+    
+    // 평균 출석교인수 = 총 출석 수 / 이벤트 수 (이벤트가 있는 경우만)
+    const averageAttendance = eventCount > 0 
+      ? Math.round(totalAttendanceCount / eventCount) 
+      : 0;
+    
     res.json({
       totalMembers: totalMembers[0].count,
       newMembers: newMembers[0].count,
-      weeklyTrend: weeklyTrend
+      weeklyTrend: weeklyTrend,
+      averageAttendance4Weeks: averageAttendance
     });
   } catch (error) {
     console.error('대시보드 통계 조회 오류:', error);
@@ -1484,9 +1510,12 @@ app.get('/api/attendance/events/:id', async (req, res) => {
   try {
     const { id } = req.params;
     
-    // 이벤트 정보 조회
+    // 이벤트 정보 조회 (작성자 이름 포함)
     const [events] = await pool.execute(
-      'SELECT * FROM attendance_events WHERE id = ?',
+      `SELECT ae.*, m.name as creator_name 
+       FROM attendance_events ae 
+       LEFT JOIN members m ON ae.creator_id = m.id 
+       WHERE ae.id = ?`,
       [id]
     );
     
@@ -1534,21 +1563,43 @@ app.get('/api/attendance/events/:id', async (req, res) => {
 // 새 출석부 이벤트 생성
 app.post('/api/attendance/events', async (req, res) => {
   try {
-    const { event_name, event_date } = req.body;
+    const { event_name, event_date, creator_id } = req.body;
     
     if (!event_name || !event_date) {
       return res.status(400).json({ error: '이벤트명과 날짜는 필수입니다.' });
     }
     
+    // creator_id가 제공된 경우 해당 멤버가 존재하는지 확인
+    if (creator_id) {
+      const [memberCheck] = await pool.execute(
+        'SELECT id FROM members WHERE id = ?',
+        [creator_id]
+      );
+      if (memberCheck.length === 0) {
+        return res.status(400).json({ error: '작성자를 찾을 수 없습니다.' });
+      }
+    }
+    
     const [result] = await pool.execute(
-      'INSERT INTO attendance_events (event_name, event_date) VALUES (?, ?)',
-      [event_name, event_date]
+      'INSERT INTO attendance_events (event_name, event_date, creator_id) VALUES (?, ?, ?)',
+      [event_name, event_date, creator_id || null]
+    );
+    
+    // 생성된 이벤트 정보 조회 (작성자 정보 포함)
+    const [event] = await pool.execute(
+      `SELECT ae.*, m.name as creator_name 
+       FROM attendance_events ae 
+       LEFT JOIN members m ON ae.creator_id = m.id 
+       WHERE ae.id = ?`,
+      [result.insertId]
     );
     
     res.status(201).json({ 
       id: result.insertId, 
       event_name,
       event_date,
+      creator_id: creator_id || null,
+      creator_name: event[0]?.creator_name || null,
       message: '출석부 이벤트가 성공적으로 생성되었습니다.' 
     });
   } catch (error) {
