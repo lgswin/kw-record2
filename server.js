@@ -398,6 +398,24 @@ app.get('/api/members', async (req, res) => {
         [member.id]
       );
       member.departments = departments;
+      
+      // 신앙교육 조회
+      const [educations] = await pool.execute(
+        `SELECT 
+          me.id,
+          me.program_id,
+          ep.name as program_name,
+          me.start_date,
+          me.completion_date,
+          me.completed,
+          me.notes
+        FROM member_educations me
+        JOIN education_programs ep ON me.program_id = ep.id
+        WHERE me.member_id = ?
+        ORDER BY me.start_date DESC`,
+        [member.id]
+      );
+      member.educations = educations;
     }
     
     console.log('조회된 성도 수:', members.length);
@@ -435,6 +453,24 @@ app.get('/api/members/:id', async (req, res) => {
     } else {
       member.visit_dates = [];
     }
+    
+    // 신앙교육 조회
+    const [educations] = await pool.execute(
+      `SELECT 
+        me.id,
+        me.program_id,
+        ep.name as program_name,
+        me.start_date,
+        me.completion_date,
+        me.completed,
+        me.notes
+      FROM member_educations me
+      JOIN education_programs ep ON me.program_id = ep.id
+      WHERE me.member_id = ?
+      ORDER BY me.start_date DESC`,
+      [id]
+    );
+    member.educations = educations;
     
     res.json(member);
   } catch (error) {
@@ -1271,8 +1307,8 @@ app.get('/api/offices', async (req, res) => {
   }
 });
 
-// 새 직분 추가
-app.post('/api/offices', async (req, res) => {
+// 새 직분 추가 (관리자만)
+app.post('/api/offices', requireAdmin, async (req, res) => {
   try {
     const { office_name } = req.body;
     
@@ -1285,14 +1321,87 @@ app.post('/api/offices', async (req, res) => {
       [office_name]
     );
     
-    res.status(201).json({ 
-      id: result.insertId, 
-      office_name,
-      message: '직분이 성공적으로 추가되었습니다.' 
-    });
+    const [newOffice] = await pool.execute(
+      'SELECT * FROM offices WHERE id = ?',
+      [result.insertId]
+    );
+    
+    res.status(201).json(newOffice[0]);
   } catch (error) {
     console.error('직분 추가 오류:', error);
-    res.status(500).json({ error: '직분 추가에 실패했습니다.' });
+    if (error.code === 'ER_DUP_ENTRY') {
+      res.status(400).json({ error: '이미 존재하는 직분명입니다.' });
+    } else {
+      res.status(500).json({ error: '직분 추가에 실패했습니다.' });
+    }
+  }
+});
+
+// 직분 수정 (관리자만)
+app.put('/api/offices/:id', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { office_name } = req.body;
+    
+    if (!office_name) {
+      return res.status(400).json({ error: '직분명은 필수입니다.' });
+    }
+    
+    await pool.execute(
+      'UPDATE offices SET office_name = ? WHERE id = ?',
+      [office_name, id]
+    );
+    
+    const [updated] = await pool.execute(
+      'SELECT * FROM offices WHERE id = ?',
+      [id]
+    );
+    
+    if (updated.length === 0) {
+      return res.status(404).json({ error: '직분을 찾을 수 없습니다.' });
+    }
+    
+    res.json(updated[0]);
+  } catch (error) {
+    console.error('직분 수정 오류:', error);
+    if (error.code === 'ER_DUP_ENTRY') {
+      res.status(400).json({ error: '이미 존재하는 직분명입니다.' });
+    } else {
+      res.status(500).json({ error: '직분 수정에 실패했습니다.' });
+    }
+  }
+});
+
+// 직분 삭제 (관리자만)
+app.delete('/api/offices/:id', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // 사용 중인지 확인
+    const [inUse] = await pool.execute(
+      'SELECT COUNT(*) as count FROM member_offices WHERE office_id = ?',
+      [id]
+    );
+    
+    if (inUse[0].count > 0) {
+      return res.status(400).json({ 
+        error: `이 직분은 ${inUse[0].count}명의 성도에서 사용 중이므로 삭제할 수 없습니다.` 
+      });
+    }
+    
+    const [result] = await pool.execute(
+      'DELETE FROM offices WHERE id = ?',
+      [id]
+    );
+    
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: '직분을 찾을 수 없습니다.' });
+    }
+    
+    res.json({ message: '직분이 삭제되었습니다.' });
+  } catch (error) {
+    console.error('직분 삭제 오류:', error);
+    res.status(500).json({ error: '직분 삭제에 실패했습니다.' });
   }
 });
 
@@ -1398,11 +1507,69 @@ app.get('/api/dashboard/stats', async (req, res) => {
       ? Math.round(totalAttendanceCount / eventCount) 
       : 0;
     
+    // 이번주 생일인 성도 조회 (오늘부터 7일 후까지)
+    const today = new Date();
+    const nextWeek = new Date(today);
+    nextWeek.setDate(nextWeek.getDate() + 7);
+    
+    // 이번주 범위 계산 (월-일 형식)
+    const todayMonthDay = `${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const nextWeekMonthDay = `${String(nextWeek.getMonth() + 1).padStart(2, '0')}-${String(nextWeek.getDate()).padStart(2, '0')}`;
+    
+    let birthdayQuery = '';
+    let birthdayParams = [];
+    
+    // 연말/연초 경계 처리 (12월 말 ~ 1월 초)
+    if (today.getMonth() === 11 && nextWeek.getMonth() === 0) {
+      // 12월 말에서 1월 초로 넘어가는 경우
+      birthdayQuery = `
+        SELECT 
+          m.id,
+          m.name,
+          m.birth_date,
+          DATE_FORMAT(m.birth_date, '%m-%d') as birth_month_day,
+          DATE_FORMAT(m.birth_date, '%m월 %d일') as birth_formatted
+        FROM members m
+        WHERE m.active = 1
+          AND m.birth_date IS NOT NULL
+          AND (
+            DATE_FORMAT(m.birth_date, '%m-%d') >= ?
+            OR DATE_FORMAT(m.birth_date, '%m-%d') <= ?
+          )
+        ORDER BY 
+          CASE 
+            WHEN DATE_FORMAT(m.birth_date, '%m-%d') >= ? THEN DATE_FORMAT(m.birth_date, '%m-%d')
+            ELSE CONCAT('13-', DATE_FORMAT(m.birth_date, '%m-%d'))
+          END
+      `;
+      birthdayParams = [todayMonthDay, nextWeekMonthDay, todayMonthDay];
+    } else {
+      // 일반적인 경우
+      birthdayQuery = `
+        SELECT 
+          m.id,
+          m.name,
+          m.birth_date,
+          DATE_FORMAT(m.birth_date, '%m-%d') as birth_month_day,
+          DATE_FORMAT(m.birth_date, '%m월 %d일') as birth_formatted
+        FROM members m
+        WHERE m.active = 1
+          AND m.birth_date IS NOT NULL
+          AND DATE_FORMAT(m.birth_date, '%m-%d') >= ?
+          AND DATE_FORMAT(m.birth_date, '%m-%d') <= ?
+        ORDER BY DATE_FORMAT(m.birth_date, '%m-%d')
+      `;
+      birthdayParams = [todayMonthDay, nextWeekMonthDay];
+    }
+    
+    const [birthdayMembers] = await pool.execute(birthdayQuery, birthdayParams);
+    
     res.json({
       totalMembers: totalMembers[0].count,
       newMembers: newMembers[0].count,
       weeklyTrend: weeklyTrend,
-      averageAttendance4Weeks: averageAttendance
+      averageAttendance4Weeks: averageAttendance,
+      birthdayMembers: birthdayMembers || []
     });
   } catch (error) {
     console.error('대시보드 통계 조회 오류:', error);
@@ -1525,12 +1692,12 @@ app.get('/api/attendance/events/:id', async (req, res) => {
     
     const event = events[0];
     
-    // 출석한 성도 목록 조회
+    // 출석한 성도 목록 조회 (활성화된 성도만)
     const [attendedMembers] = await pool.execute(`
       SELECT m.id, m.name, m.phone, ar.attended_at
       FROM attendance_records ar
       JOIN members m ON ar.member_id = m.id
-      WHERE ar.event_id = ?
+      WHERE ar.event_id = ? AND m.active = 1
       ORDER BY m.name
     `, [id]);
     
@@ -1540,6 +1707,7 @@ app.get('/api/attendance/events/:id', async (req, res) => {
         m.id,
         m.name,
         m.phone,
+        m.active,
         CASE WHEN ar.id IS NOT NULL THEN 1 ELSE 0 END as attended,
         ar.attended_at,
         COALESCE(m.is_new_member, FALSE) as is_new_member
@@ -1646,7 +1814,7 @@ app.post('/api/attendance/records', async (req, res) => {
       const totalAttendance = attendanceCount[0].count;
       
       // 출석이 3회 이상이면 새신자 상태 해제
-      if (totalAttendance >= 3) {
+      if (totalAttendance >= 5) {
         await pool.execute(
           'UPDATE members SET is_new_member = FALSE WHERE id = ? AND is_new_member = TRUE',
           [member_id]
@@ -1768,8 +1936,8 @@ app.post('/api/attendance/add-guest', async (req, res) => {
       
       const totalAttendance = attendanceCount[0].count;
       
-      // 출석이 3회 이상이면 새신자 상태 해제
-      if (totalAttendance >= 3) {
+      // 출석이 5회 이상이면 새신자 상태 해제
+      if (totalAttendance >= 5) {
         await connection.execute(
           'UPDATE members SET is_new_member = FALSE WHERE id = ? AND is_new_member = TRUE',
           [memberId]
@@ -1816,6 +1984,295 @@ app.delete('/api/attendance/events/:id', async (req, res) => {
   } catch (error) {
     console.error('출석부 이벤트 삭제 오류:', error);
     res.status(500).json({ error: '출석부 이벤트 삭제에 실패했습니다.' });
+  }
+});
+
+// ==================== 신앙교육 API ====================
+// 신앙교육 프로그램 목록 조회 (관리자는 모든 프로그램, 일반 사용자는 활성 프로그램만)
+app.get('/api/education/programs', async (req, res) => {
+  try {
+    const isAdmin = req.session && req.session.user && req.session.user.role === 'admin';
+    let query, params;
+    
+    if (isAdmin) {
+      // 관리자는 모든 프로그램 조회 (활성/비활성 모두)
+      query = 'SELECT * FROM education_programs ORDER BY name';
+      params = [];
+    } else {
+      // 일반 사용자는 활성 프로그램만 조회
+      query = 'SELECT * FROM education_programs WHERE active = TRUE ORDER BY name';
+      params = [];
+    }
+    
+    const [programs] = await pool.execute(query, params);
+    res.json(programs);
+  } catch (error) {
+    console.error('신앙교육 프로그램 목록 조회 오류:', error);
+    res.status(500).json({ error: '신앙교육 프로그램 목록을 가져올 수 없습니다.' });
+  }
+});
+
+// 신앙교육 프로그램 생성 (관리자만)
+app.post('/api/education/programs', requireAdmin, async (req, res) => {
+  try {
+    const { name, description } = req.body;
+    
+    if (!name) {
+      return res.status(400).json({ error: '프로그램 이름은 필수입니다.' });
+    }
+    
+    const [result] = await pool.execute(
+      'INSERT INTO education_programs (name, description) VALUES (?, ?)',
+      [name, description || null]
+    );
+    
+    const [newProgram] = await pool.execute(
+      'SELECT * FROM education_programs WHERE id = ?',
+      [result.insertId]
+    );
+    
+    res.status(201).json(newProgram[0]);
+  } catch (error) {
+    console.error('신앙교육 프로그램 생성 오류:', error);
+    res.status(500).json({ error: '신앙교육 프로그램 생성에 실패했습니다.' });
+  }
+});
+
+// 신앙교육 프로그램 수정 (관리자만)
+app.put('/api/education/programs/:id', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, description, active } = req.body;
+    
+    if (!name) {
+      return res.status(400).json({ error: '프로그램 이름은 필수입니다.' });
+    }
+    
+    await pool.execute(
+      'UPDATE education_programs SET name = ?, description = ?, active = ? WHERE id = ?',
+      [name, description || null, active !== undefined ? active : true, id]
+    );
+    
+    const [updated] = await pool.execute(
+      'SELECT * FROM education_programs WHERE id = ?',
+      [id]
+    );
+    
+    if (updated.length === 0) {
+      return res.status(404).json({ error: '신앙교육 프로그램을 찾을 수 없습니다.' });
+    }
+    
+    res.json(updated[0]);
+  } catch (error) {
+    console.error('신앙교육 프로그램 수정 오류:', error);
+    res.status(500).json({ error: '신앙교육 프로그램 수정에 실패했습니다.' });
+  }
+});
+
+// 신앙교육 프로그램 삭제 (관리자만)
+app.delete('/api/education/programs/:id', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // 사용 중인지 확인
+    const [inUse] = await pool.execute(
+      'SELECT COUNT(*) as count FROM member_educations WHERE program_id = ?',
+      [id]
+    );
+    
+    if (inUse[0].count > 0) {
+      return res.status(400).json({ 
+        error: `이 프로그램은 ${inUse[0].count}개의 신앙교육 기록에서 사용 중이므로 삭제할 수 없습니다.` 
+      });
+    }
+    
+    const [result] = await pool.execute(
+      'DELETE FROM education_programs WHERE id = ?',
+      [id]
+    );
+    
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: '신앙교육 프로그램을 찾을 수 없습니다.' });
+    }
+    
+    res.json({ message: '신앙교육 프로그램이 삭제되었습니다.' });
+  } catch (error) {
+    console.error('신앙교육 프로그램 삭제 오류:', error);
+    res.status(500).json({ error: '신앙교육 프로그램 삭제에 실패했습니다.' });
+  }
+});
+
+// 성도별 신앙교육 기록 조회
+app.get('/api/education/members/:memberId', async (req, res) => {
+  try {
+    const { memberId } = req.params;
+    
+    const [educations] = await pool.execute(
+      `SELECT 
+        me.id,
+        me.member_id,
+        me.program_id,
+        ep.name as program_name,
+        me.start_date,
+        me.completion_date,
+        me.completed,
+        me.notes,
+        me.created_at,
+        me.updated_at
+      FROM member_educations me
+      JOIN education_programs ep ON me.program_id = ep.id
+      WHERE me.member_id = ?
+      ORDER BY me.start_date DESC`,
+      [memberId]
+    );
+    
+    res.json(educations);
+  } catch (error) {
+    console.error('성도별 신앙교육 기록 조회 오류:', error);
+    res.status(500).json({ error: '신앙교육 기록을 가져올 수 없습니다.' });
+  }
+});
+
+// 성도별 신앙교육 기록 추가
+app.post('/api/education/members/:memberId', requireAuth, async (req, res) => {
+  try {
+    const { memberId } = req.params;
+    const { program_id, start_date, completion_date, completed, notes } = req.body;
+    
+    if (!program_id) {
+      return res.status(400).json({ error: '신앙교육 프로그램은 필수입니다.' });
+    }
+    
+    // 기존 기록 확인
+    const [existing] = await pool.execute(
+      'SELECT id FROM member_educations WHERE member_id = ? AND program_id = ?',
+      [memberId, program_id]
+    );
+    
+    if (existing.length > 0) {
+      return res.status(400).json({ error: '이미 등록된 신앙교육 프로그램입니다.' });
+    }
+    
+    const [result] = await pool.execute(
+      `INSERT INTO member_educations 
+        (member_id, program_id, start_date, completion_date, completed, notes) 
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        memberId,
+        program_id,
+        start_date || null,
+        completion_date || null,
+        completed || false,
+        notes || null
+      ]
+    );
+    
+    const [newEducation] = await pool.execute(
+      `SELECT 
+        me.id,
+        me.member_id,
+        me.program_id,
+        ep.name as program_name,
+        me.start_date,
+        me.completion_date,
+        me.completed,
+        me.notes,
+        me.created_at,
+        me.updated_at
+      FROM member_educations me
+      JOIN education_programs ep ON me.program_id = ep.id
+      WHERE me.id = ?`,
+      [result.insertId]
+    );
+    
+    res.status(201).json(newEducation[0]);
+  } catch (error) {
+    console.error('신앙교육 기록 추가 오류:', error);
+    res.status(500).json({ error: '신앙교육 기록 추가에 실패했습니다.' });
+  }
+});
+
+// 성도별 신앙교육 기록 수정
+app.put('/api/education/members/:memberId/records/:recordId', requireAuth, async (req, res) => {
+  try {
+    const { memberId, recordId } = req.params;
+    const { start_date, completion_date, completed, notes } = req.body;
+    
+    // 기록 존재 확인
+    const [existing] = await pool.execute(
+      'SELECT id FROM member_educations WHERE id = ? AND member_id = ?',
+      [recordId, memberId]
+    );
+    
+    if (existing.length === 0) {
+      return res.status(404).json({ error: '신앙교육 기록을 찾을 수 없습니다.' });
+    }
+    
+    // 완료 처리 시 완료일 자동 설정
+    let finalCompletionDate = completion_date;
+    if (completed && !completion_date) {
+      finalCompletionDate = new Date().toISOString().split('T')[0];
+    } else if (!completed) {
+      finalCompletionDate = null;
+    }
+    
+    await pool.execute(
+      `UPDATE member_educations 
+       SET start_date = ?, completion_date = ?, completed = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND member_id = ?`,
+      [
+        start_date || null,
+        finalCompletionDate,
+        completed || false,
+        notes || null,
+        recordId,
+        memberId
+      ]
+    );
+    
+    const [updated] = await pool.execute(
+      `SELECT 
+        me.id,
+        me.member_id,
+        me.program_id,
+        ep.name as program_name,
+        me.start_date,
+        me.completion_date,
+        me.completed,
+        me.notes,
+        me.created_at,
+        me.updated_at
+      FROM member_educations me
+      JOIN education_programs ep ON me.program_id = ep.id
+      WHERE me.id = ?`,
+      [recordId]
+    );
+    
+    res.json(updated[0]);
+  } catch (error) {
+    console.error('신앙교육 기록 수정 오류:', error);
+    res.status(500).json({ error: '신앙교육 기록 수정에 실패했습니다.' });
+  }
+});
+
+// 성도별 신앙교육 기록 삭제
+app.delete('/api/education/members/:memberId/records/:recordId', requireAuth, async (req, res) => {
+  try {
+    const { memberId, recordId } = req.params;
+    
+    const [result] = await pool.execute(
+      'DELETE FROM member_educations WHERE id = ? AND member_id = ?',
+      [recordId, memberId]
+    );
+    
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: '신앙교육 기록을 찾을 수 없습니다.' });
+    }
+    
+    res.json({ message: '신앙교육 기록이 삭제되었습니다.' });
+  } catch (error) {
+    console.error('신앙교육 기록 삭제 오류:', error);
+    res.status(500).json({ error: '신앙교육 기록 삭제에 실패했습니다.' });
   }
 });
 

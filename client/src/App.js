@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import './App.css';
 
@@ -127,7 +127,7 @@ function App() {
   return (
     <div className="App">
       <header className="App-header">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <img 
             src="/logo.png" 
             alt="KW한인장로교회" 
@@ -205,17 +205,19 @@ function App() {
           부서 관리
         </button>
         <button 
-          className={activeTab === 'organizations' ? 'nav-tab active' : 'nav-tab'}
-          onClick={() => setActiveTab('organizations')}
-        >
-          조직 관리
-        </button>
-        <button 
           className={activeTab === 'attendance' ? 'nav-tab active' : 'nav-tab'}
           onClick={() => setActiveTab('attendance')}
         >
           출석부
         </button>
+        {user && user.role === 'admin' && (
+          <button 
+            className={activeTab === 'education-settings' ? 'nav-tab active' : 'nav-tab'}
+            onClick={() => setActiveTab('education-settings')}
+          >
+            세팅
+          </button>
+        )}
       </nav>
 
       <main className="container">
@@ -225,8 +227,8 @@ function App() {
         {activeTab === 'families' && <FamilyManagement />}
         {activeTab === 'parties' && <PartyManagement />}
         {activeTab === 'departments' && <DepartmentManagement />}
-        {activeTab === 'organizations' && <OrganizationManagement />}
         {activeTab === 'attendance' && <AttendanceManagement />}
+        {activeTab === 'education-settings' && <EducationSettingsPage user={user} />}
       </main>
     </div>
   );
@@ -435,7 +437,8 @@ function SettingsPage({ user, onPasswordChange }) {
         padding: '30px',
         borderRadius: '10px',
         boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-        maxWidth: '500px'
+        maxWidth: '500px',
+        margin: '0 auto'
       }}>
         <h3 style={{ marginBottom: '20px', color: '#2c3e50' }}>비밀번호 변경</h3>
         
@@ -585,20 +588,548 @@ function SettingsPage({ user, onPasswordChange }) {
   );
 }
 
+// 신앙교육 프로그램 관리 페이지 컴포넌트
+function EducationSettingsPage({ user }) {
+  const [educationPrograms, setEducationPrograms] = useState([]);
+  const [showEducationForm, setShowEducationForm] = useState(false);
+  const [editingProgramId, setEditingProgramId] = useState(null);
+  const [programFormData, setProgramFormData] = useState({
+    name: '',
+    description: '',
+    active: true
+  });
+  const [programError, setProgramError] = useState('');
+  const [programLoading, setProgramLoading] = useState(false);
+  
+  // 직분 관리
+  const [offices, setOffices] = useState([]);
+  const [showOfficeForm, setShowOfficeForm] = useState(false);
+  const [editingOfficeId, setEditingOfficeId] = useState(null);
+  const [officeFormData, setOfficeFormData] = useState({
+    office_name: ''
+  });
+  const [officeError, setOfficeError] = useState('');
+  const [officeLoading, setOfficeLoading] = useState(false);
+
+  // 신앙교육 프로그램 목록 조회
+  useEffect(() => {
+    fetchEducationPrograms();
+    fetchOffices();
+  }, []);
+
+  const fetchEducationPrograms = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/education/programs`);
+      setEducationPrograms(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.error('신앙교육 프로그램 목록 조회 오류:', error);
+      setEducationPrograms([]);
+    }
+  };
+
+  const handleProgramSubmit = async (e) => {
+    e.preventDefault();
+    setProgramError('');
+    
+    if (!programFormData.name.trim()) {
+      setProgramError('프로그램 이름을 입력해주세요.');
+      return;
+    }
+
+    setProgramLoading(true);
+    try {
+      if (editingProgramId) {
+        // 수정
+        await axios.put(`${API_URL}/education/programs/${editingProgramId}`, programFormData);
+        alert('신앙교육 프로그램이 수정되었습니다.');
+      } else {
+        // 추가
+        await axios.post(`${API_URL}/education/programs`, programFormData);
+        alert('신앙교육 프로그램이 추가되었습니다.');
+      }
+      
+      setProgramFormData({ name: '', description: '', active: true });
+      setEditingProgramId(null);
+      setShowEducationForm(false);
+      fetchEducationPrograms();
+    } catch (error) {
+      console.error('신앙교육 프로그램 저장 오류:', error);
+      setProgramError(error.response?.data?.error || '저장에 실패했습니다.');
+    } finally {
+      setProgramLoading(false);
+    }
+  };
+
+  const handleProgramEdit = (program) => {
+    setProgramFormData({
+      name: program.name,
+      description: program.description || '',
+      active: program.active !== undefined ? program.active : true
+    });
+    setEditingProgramId(program.id);
+    setShowEducationForm(true);
+    setProgramError('');
+  };
+
+  const handleProgramDelete = async (id) => {
+    if (!window.confirm('이 신앙교육 프로그램을 삭제하시겠습니까?')) {
+      return;
+    }
+
+    try {
+      await axios.delete(`${API_URL}/education/programs/${id}`);
+      alert('신앙교육 프로그램이 삭제되었습니다.');
+      fetchEducationPrograms();
+    } catch (error) {
+      console.error('신앙교육 프로그램 삭제 오류:', error);
+      alert(error.response?.data?.error || '삭제에 실패했습니다.');
+    }
+  };
+
+  const handleProgramCancel = () => {
+    setProgramFormData({ name: '', description: '', active: true });
+    setEditingProgramId(null);
+    setShowEducationForm(false);
+    setProgramError('');
+  };
+
+  // 직분 목록 조회
+  const fetchOffices = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/offices`);
+      setOffices(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.error('직분 목록 조회 오류:', error);
+      setOffices([]);
+    }
+  };
+
+  const handleOfficeSubmit = async (e) => {
+    e.preventDefault();
+    setOfficeError('');
+    
+    if (!officeFormData.office_name.trim()) {
+      setOfficeError('직분명을 입력해주세요.');
+      return;
+    }
+
+    setOfficeLoading(true);
+    try {
+      if (editingOfficeId) {
+        // 수정
+        await axios.put(`${API_URL}/offices/${editingOfficeId}`, officeFormData);
+        alert('직분이 수정되었습니다.');
+      } else {
+        // 추가
+        await axios.post(`${API_URL}/offices`, officeFormData);
+        alert('직분이 추가되었습니다.');
+      }
+      
+      setOfficeFormData({ office_name: '' });
+      setEditingOfficeId(null);
+      setShowOfficeForm(false);
+      fetchOffices();
+    } catch (error) {
+      console.error('직분 저장 오류:', error);
+      setOfficeError(error.response?.data?.error || '저장에 실패했습니다.');
+    } finally {
+      setOfficeLoading(false);
+    }
+  };
+
+  const handleOfficeEdit = (office) => {
+    setOfficeFormData({
+      office_name: office.office_name
+    });
+    setEditingOfficeId(office.id);
+    setShowOfficeForm(true);
+    setOfficeError('');
+  };
+
+  const handleOfficeDelete = async (id) => {
+    if (!window.confirm('이 직분을 삭제하시겠습니까?')) {
+      return;
+    }
+
+    try {
+      await axios.delete(`${API_URL}/offices/${id}`);
+      alert('직분이 삭제되었습니다.');
+      fetchOffices();
+    } catch (error) {
+      console.error('직분 삭제 오류:', error);
+      alert(error.response?.data?.error || '삭제에 실패했습니다.');
+    }
+  };
+
+  const handleOfficeCancel = () => {
+    setOfficeFormData({ office_name: '' });
+    setEditingOfficeId(null);
+    setShowOfficeForm(false);
+    setOfficeError('');
+  };
+
+  return (
+    <div style={{ padding: '20px 0' }}>
+      <h2 style={{ marginBottom: '30px', color: '#2c3e50' }}>신앙교육 프로그램 관리</h2>
+      
+      <div style={{
+        background: 'white',
+        padding: '30px',
+        borderRadius: '10px',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+        maxWidth: '800px',
+        margin: '0 auto'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h3 style={{ margin: 0, color: '#2c3e50' }}>신앙교육 프로그램 목록</h3>
+          <button
+            type="button"
+            onClick={() => {
+              setProgramFormData({ name: '', description: '', active: true });
+              setEditingProgramId(null);
+              setShowEducationForm(!showEducationForm);
+              setProgramError('');
+            }}
+            className="btn btn-primary"
+            style={{ fontSize: '14px', padding: '8px 16px' }}
+          >
+            {showEducationForm ? '취소' : '프로그램 추가'}
+          </button>
+        </div>
+
+        {/* 신앙교육 프로그램 목록 */}
+        {educationPrograms.length > 0 ? (
+          <div style={{ marginBottom: '20px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#f5f5f5' }}>
+                  <th style={{ padding: '12px', border: '1px solid #ddd', textAlign: 'left' }}>프로그램명</th>
+                  <th style={{ padding: '12px', border: '1px solid #ddd', textAlign: 'left' }}>설명</th>
+                  <th style={{ padding: '12px', border: '1px solid #ddd', textAlign: 'center' }}>상태</th>
+                  <th style={{ padding: '12px', border: '1px solid #ddd', textAlign: 'center' }}>작업</th>
+                </tr>
+              </thead>
+              <tbody>
+                {educationPrograms.map(program => (
+                  <tr key={program.id}>
+                    <td style={{ padding: '12px', border: '1px solid #ddd' }}>{program.name}</td>
+                    <td style={{ padding: '12px', border: '1px solid #ddd' }}>
+                      {program.description || '-'}
+                    </td>
+                    <td style={{ padding: '12px', border: '1px solid #ddd', textAlign: 'center' }}>
+                      {program.active ? (
+                        <span style={{ color: '#4caf50', fontWeight: 'bold' }}>활성</span>
+                      ) : (
+                        <span style={{ color: '#999' }}>비활성</span>
+                      )}
+                    </td>
+                    <td style={{ padding: '12px', border: '1px solid #ddd', textAlign: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleProgramEdit(program)}
+                        className="btn btn-secondary"
+                        style={{ marginRight: '5px', padding: '4px 8px', fontSize: '12px' }}
+                      >
+                        수정
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleProgramDelete(program.id)}
+                        className="btn btn-delete"
+                        style={{ padding: '4px 8px', fontSize: '12px' }}
+                      >
+                        삭제
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p style={{ color: '#999', marginBottom: '20px' }}>등록된 신앙교육 프로그램이 없습니다.</p>
+        )}
+
+        {/* 신앙교육 프로그램 추가/수정 폼 */}
+        {showEducationForm && (
+          <div style={{
+            border: '1px solid #ddd',
+            borderRadius: '8px',
+            padding: '20px',
+            backgroundColor: '#f9f9f9',
+            marginTop: '20px'
+          }}>
+            <h4 style={{ marginBottom: '15px' }}>
+              {editingProgramId ? '신앙교육 프로그램 수정' : '신앙교육 프로그램 추가'}
+            </h4>
+
+            {programError && (
+              <div style={{
+                padding: '12px',
+                background: '#fee',
+                color: '#c33',
+                borderRadius: '4px',
+                marginBottom: '15px',
+                fontSize: '0.9em'
+              }}>
+                {programError}
+              </div>
+            )}
+
+            <form onSubmit={handleProgramSubmit}>
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                  프로그램 이름 *
+                </label>
+                <input
+                  type="text"
+                  value={programFormData.name}
+                  onChange={(e) => setProgramFormData(prev => ({ ...prev, name: e.target.value }))}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '14px'
+                  }}
+                  placeholder="예: 새신자 교육"
+                  required
+                />
+              </div>
+
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                  설명
+                </label>
+                <textarea
+                  value={programFormData.description}
+                  onChange={(e) => setProgramFormData(prev => ({ ...prev, description: e.target.value }))}
+                  rows="3"
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    resize: 'vertical'
+                  }}
+                  placeholder="프로그램에 대한 설명을 입력하세요..."
+                />
+              </div>
+
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={programFormData.active}
+                    onChange={(e) => setProgramFormData(prev => ({ ...prev, active: e.target.checked }))}
+                    style={{ marginRight: '8px', width: '18px', height: '18px' }}
+                  />
+                  <span>활성 상태</span>
+                </label>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={programLoading}
+                >
+                  {programLoading ? '저장 중...' : (editingProgramId ? '수정' : '추가')}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleProgramCancel}
+                  className="btn btn-secondary"
+                >
+                  취소
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+      </div>
+
+      {/* 직분 관리 */}
+      <div style={{
+        background: 'white',
+        padding: '30px',
+        borderRadius: '10px',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+        marginTop: '30px',
+        maxWidth: '800px',
+        marginLeft: 'auto',
+        marginRight: 'auto'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h3 style={{ margin: 0, color: '#2c3e50' }}>직분 관리</h3>
+          <button
+            type="button"
+            onClick={() => {
+              setOfficeFormData({ office_name: '' });
+              setEditingOfficeId(null);
+              setShowOfficeForm(!showOfficeForm);
+              setOfficeError('');
+            }}
+            className="btn btn-primary"
+            style={{ fontSize: '14px', padding: '8px 16px' }}
+          >
+            {showOfficeForm ? '취소' : '직분 추가'}
+          </button>
+        </div>
+
+        {/* 직분 목록 */}
+        {offices.length > 0 ? (
+          <div style={{ marginBottom: '20px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#f5f5f5' }}>
+                  <th style={{ padding: '12px', border: '1px solid #ddd', textAlign: 'left' }}>직분명</th>
+                  <th style={{ padding: '12px', border: '1px solid #ddd', textAlign: 'center' }}>작업</th>
+                </tr>
+              </thead>
+              <tbody>
+                {offices.map(office => (
+                  <tr key={office.id}>
+                    <td style={{ padding: '12px', border: '1px solid #ddd' }}>{office.office_name}</td>
+                    <td style={{ padding: '12px', border: '1px solid #ddd', textAlign: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleOfficeEdit(office)}
+                        className="btn btn-secondary"
+                        style={{ marginRight: '5px', padding: '4px 8px', fontSize: '12px' }}
+                      >
+                        수정
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOfficeDelete(office.id)}
+                        className="btn btn-delete"
+                        style={{ padding: '4px 8px', fontSize: '12px' }}
+                      >
+                        삭제
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p style={{ color: '#999', marginBottom: '20px' }}>등록된 직분이 없습니다.</p>
+        )}
+
+        {/* 직분 추가/수정 폼 */}
+        {showOfficeForm && (
+          <div style={{
+            border: '1px solid #ddd',
+            borderRadius: '8px',
+            padding: '20px',
+            backgroundColor: '#f9f9f9',
+            marginTop: '20px'
+          }}>
+            <h4 style={{ marginBottom: '15px' }}>
+              {editingOfficeId ? '직분 수정' : '직분 추가'}
+            </h4>
+
+            {officeError && (
+              <div style={{
+                padding: '12px',
+                background: '#fee',
+                color: '#c33',
+                borderRadius: '4px',
+                marginBottom: '15px',
+                fontSize: '0.9em'
+              }}>
+                {officeError}
+              </div>
+            )}
+
+            <form onSubmit={handleOfficeSubmit}>
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                  직분명 *
+                </label>
+                <input
+                  type="text"
+                  value={officeFormData.office_name}
+                  onChange={(e) => setOfficeFormData(prev => ({ ...prev, office_name: e.target.value }))}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '14px'
+                  }}
+                  placeholder="예: 목사"
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={officeLoading}
+                >
+                  {officeLoading ? '저장 중...' : (editingOfficeId ? '수정' : '추가')}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleOfficeCancel}
+                  className="btn btn-secondary"
+                >
+                  취소
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // 대시보드 컴포넌트
 function Dashboard() {
   const [stats, setStats] = useState({
     totalMembers: 0,
     newMembers: 0,
     weeklyTrend: [],
-    averageAttendance4Weeks: 0
+    averageAttendance4Weeks: 0,
+    birthdayMembers: []
   });
   const [newMembersList, setNewMembersList] = useState([]);
   const [loading, setLoading] = useState(true);
+  const chartContainerRef = useRef(null);
+  const [chartWidth, setChartWidth] = useState(800);
 
   useEffect(() => {
     fetchDashboardData();
   }, []);
+
+  useEffect(() => {
+    const updateChartWidth = () => {
+      if (chartContainerRef.current) {
+        // 패딩을 고려한 실제 너비 계산
+        const containerWidth = chartContainerRef.current.offsetWidth;
+        setChartWidth(containerWidth);
+      }
+    };
+    
+    // 초기 너비 설정
+    updateChartWidth();
+    
+    // 리사이즈 이벤트 리스너
+    window.addEventListener('resize', updateChartWidth);
+    
+    // 데이터 로드 후에도 다시 측정
+    if (stats.weeklyTrend.length > 0) {
+      setTimeout(updateChartWidth, 100);
+    }
+    
+    return () => window.removeEventListener('resize', updateChartWidth);
+  }, [stats.weeklyTrend.length]);
 
   const fetchDashboardData = async () => {
     setLoading(true);
@@ -691,47 +1222,144 @@ function Dashboard() {
       }}>
         <h3 style={{ marginBottom: '20px', color: '#2c3e50' }}>출석율 추이 (최근 8주)</h3>
         {stats.weeklyTrend.length > 0 ? (
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '15px', height: '300px', padding: '20px 0' }}>
-            {stats.weeklyTrend.map((week, index) => {
-              const height = (parseFloat(week.attendanceRate) / maxAttendanceRate) * 100;
+          <div ref={chartContainerRef} style={{ position: 'relative', height: '300px', padding: '20px 0 40px 0', width: '100%' }}>
+            {/* SVG 그래프 */}
+            {(() => {
+              const svgWidth = Math.max(chartWidth, 800);
+              const chartHeight = 220;
+              const padding = 40;
+              const graphWidth = svgWidth - padding * 2;
+              const graphHeight = chartHeight - padding;
+              
+              const points = stats.weeklyTrend.map((week, index) => {
+                const x = padding + (index / (stats.weeklyTrend.length - 1 || 1)) * graphWidth;
+                const y = padding + (1 - parseFloat(week.attendanceRate) / maxAttendanceRate) * graphHeight;
+                return { x, y, value: parseFloat(week.attendanceRate) };
+              });
+              
               return (
-                <div key={index} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <>
+                  <svg width="100%" height="260" style={{ display: 'block' }} viewBox={`0 0 ${svgWidth} 260`} preserveAspectRatio="none">
+                    {/* 그리드 라인 */}
+                    {[0, 25, 50, 75, 100].map((percent, idx) => {
+                      const y = (100 - percent) * 2.2; // 220px 높이 기준
+                      return (
+                        <g key={idx}>
+                          <line
+                            x1="40"
+                            y1={y}
+                            x2={svgWidth}
+                            y2={y}
+                            stroke="#e0e0e0"
+                            strokeWidth="1"
+                            strokeDasharray="4,4"
+                          />
+                          <text
+                            x="35"
+                            y={y + 4}
+                            fill="#999"
+                            fontSize="12"
+                            textAnchor="end"
+                          >
+                            {percent}%
+                          </text>
+                        </g>
+                      );
+                    })}
+                    
+                    {/* 선 그라데이션 정의 */}
+                    <defs>
+                      <linearGradient id="lineGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stopColor="#667eea" />
+                        <stop offset="100%" stopColor="#764ba2" />
+                      </linearGradient>
+                    </defs>
+                    
+                    {/* 영역 채우기 경로 */}
+                    {(() => {
+                      const pathData = points.map((point, index) => 
+                        `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`
+                      ).join(' ');
+                      const areaPath = `${pathData} L ${points[points.length - 1].x} ${padding + graphHeight} L ${points[0].x} ${padding + graphHeight} Z`;
+                      
+                      return (
+                        <g>
+                          {/* 영역 채우기 */}
+                          <path
+                            d={areaPath}
+                            fill="url(#lineGradient)"
+                            opacity="0.2"
+                          />
+                          {/* 꺽은선 */}
+                          <path
+                            d={pathData}
+                            fill="none"
+                            stroke="url(#lineGradient)"
+                            strokeWidth="3"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                          {/* 데이터 포인트 */}
+                          {points.map((point, index) => (
+                            <g key={index}>
+                              <circle
+                                cx={point.x}
+                                cy={point.y}
+                                r="6"
+                                fill="#667eea"
+                                stroke="white"
+                                strokeWidth="2"
+                              />
+                              {/* 값 표시 */}
+                              <text
+                                x={point.x}
+                                y={point.y - 12}
+                                fill="#667eea"
+                                fontSize="11"
+                                fontWeight="bold"
+                                textAnchor="middle"
+                              >
+                                {point.value.toFixed(1)}%
+                              </text>
+                              {/* 툴팁 */}
+                              <title>{stats.weeklyTrend[index].weekLabel}: {point.value.toFixed(1)}%</title>
+                            </g>
+                          ))}
+                        </g>
+                      );
+                    })()}
+                  </svg>
+                  
+                  {/* X축 레이블 - 그래프 포인트와 정확히 맞추기 */}
                   <div style={{
-                    width: '100%',
-                    height: `${height}%`,
-                    minHeight: '20px',
-                    background: 'linear-gradient(to top, #667eea, #764ba2)',
-                    borderRadius: '4px 4px 0 0',
-                    marginBottom: '10px',
                     position: 'relative',
-                    display: 'flex',
-                    alignItems: 'flex-end',
-                    justifyContent: 'center',
-                    padding: '5px'
-                  }}>
-                    <span style={{
-                      color: 'white',
-                      fontSize: '0.85em',
-                      fontWeight: 'bold',
-                      textShadow: '0 1px 2px rgba(0,0,0,0.3)'
-                    }}>
-                      {week.attendanceRate}%
-                    </span>
-                  </div>
-                  <div style={{
-                    fontSize: '0.75em',
-                    color: '#666',
-                    textAlign: 'center',
-                    transform: 'rotate(-45deg)',
-                    transformOrigin: 'center',
-                    whiteSpace: 'nowrap',
+                    height: '40px',
                     marginTop: '10px'
                   }}>
-                    {week.weekLabel}
+                    {points.map((point, index) => {
+                      // SVG의 viewBox를 기준으로 실제 픽셀 위치 계산
+                      const actualX = (point.x / svgWidth) * 100;
+                      return (
+                        <div
+                          key={index}
+                          style={{
+                            position: 'absolute',
+                            left: `${actualX}%`,
+                            transform: 'translateX(-50%)',
+                            fontSize: '0.75em',
+                            color: '#666',
+                            textAlign: 'center',
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          {stats.weeklyTrend[index].weekLabel}
+                        </div>
+                      );
+                    })}
                   </div>
-                </div>
+                </>
               );
-            })}
+            })()}
           </div>
         ) : (
           <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
@@ -807,6 +1435,55 @@ function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* 이번주 생일인 성도 */}
+      <div style={{
+        background: 'white',
+        padding: '30px',
+        borderRadius: '10px',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+        marginTop: '30px'
+      }}>
+        <h3 style={{ marginBottom: '20px', color: '#2c3e50' }}>이번주 생일인 성도</h3>
+        {stats.birthdayMembers && stats.birthdayMembers.length > 0 ? (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+            gap: '15px'
+          }}>
+            {stats.birthdayMembers.map(member => (
+              <div key={member.id} style={{
+                padding: '15px',
+                background: 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)',
+                borderRadius: '8px',
+                border: '1px solid #ffb74d',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                textAlign: 'center'
+              }}>
+                <div style={{
+                  fontSize: '1.2em',
+                  fontWeight: 'bold',
+                  marginBottom: '8px',
+                  color: '#d84315'
+                }}>
+                  🎂 {member.name}
+                </div>
+                <div style={{
+                  fontSize: '0.95em',
+                  color: '#bf360c',
+                  fontWeight: '500'
+                }}>
+                  {member.birth_formatted || (member.birth_date ? new Date(member.birth_date).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' }) : '')}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
+            이번주 생일인 성도가 없습니다.
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -842,6 +1519,17 @@ function MemberManagement() {
   const [searchKeyword, setSearchKeyword] = useState('');
   const [sortColumn, setSortColumn] = useState(null);
   const [sortDirection, setSortDirection] = useState('asc'); // 'asc' or 'desc'
+  const [educationPrograms, setEducationPrograms] = useState([]);
+  const [memberEducations, setMemberEducations] = useState([]);
+  const [showEducationForm, setShowEducationForm] = useState(false);
+  const [editingEducationId, setEditingEducationId] = useState(null);
+  const [educationFormData, setEducationFormData] = useState({
+    program_id: '',
+    start_date: '',
+    completion_date: '',
+    completed: false,
+    notes: ''
+  });
 
   useEffect(() => {
     // 컴포넌트가 마운트되었는지 추적
@@ -855,7 +1543,8 @@ function MemberManagement() {
           fetchOffices(abortController.signal, isMounted),
           fetchFamilies(abortController.signal, isMounted),
           fetchParties(abortController.signal, isMounted),
-          fetchDepartments(abortController.signal, isMounted)
+          fetchDepartments(abortController.signal, isMounted),
+          fetchEducationPrograms(abortController.signal, isMounted)
         ]);
       } catch (error) {
         if (!abortController.signal.aborted && isMounted) {
@@ -965,6 +1654,32 @@ function MemberManagement() {
         console.error('부서 목록 조회 오류:', error);
         setDepartments([]);
       }
+    }
+  };
+
+  const fetchEducationPrograms = async (signal, isMounted) => {
+    try {
+      const response = await axios.get(`${API_URL}/education/programs`, { signal });
+      if (isMounted) {
+        setEducationPrograms(Array.isArray(response.data) ? response.data : []);
+      }
+    } catch (error) {
+      if (axios.isCancel(error)) return;
+      if (isMounted) {
+        console.error('신앙교육 프로그램 목록 조회 오류:', error);
+        setEducationPrograms([]);
+      }
+    }
+  };
+
+  const fetchMemberEducations = async (memberId) => {
+    if (!memberId) return;
+    try {
+      const response = await axios.get(`${API_URL}/education/members/${memberId}`);
+      setMemberEducations(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.error('성도별 신앙교육 기록 조회 오류:', error);
+      setMemberEducations([]);
     }
   };
 
@@ -1224,6 +1939,9 @@ function MemberManagement() {
     setSearchInputs({ office: '', family: '', party: '', department: '' });
     setShowDropdowns({ office: false, family: false, party: false, department: false });
     
+    // 신앙교육 기록 조회
+    fetchMemberEducations(member.id);
+    
     // 폼이 숨겨져 있으면 표시
     setShowForm(true);
     
@@ -1252,6 +1970,9 @@ function MemberManagement() {
     setEditingId(null);
     setSearchInputs({ office: '', family: '', party: '', department: '' });
     setShowDropdowns({ office: false, family: false, party: false, department: false });
+    setMemberEducations([]);
+    setShowEducationForm(false);
+    setEditingEducationId(null);
     setShowForm(true);
     
     // 폼 섹션으로 스크롤 이동
@@ -1415,7 +2136,8 @@ function MemberManagement() {
             </div>
           </div>
 
-          {/* 상세 정보 */}
+          {/* 상세 정보 - 숨김 처리 */}
+          {false && (
           <div className="form-subsection">
             <h3>상세 정보</h3>
             <div className="form-row form-row-5">
@@ -1459,6 +2181,7 @@ function MemberManagement() {
               </div>
             </div>
           </div>
+          )}
 
           {/* 신앙 정보 */}
           <div className="form-subsection">
@@ -1609,6 +2332,252 @@ function MemberManagement() {
                 </div>
               </div>
             </div>
+
+            {/* 신앙교육 */}
+            {editingId && (
+              <div style={{ marginTop: '30px', borderTop: '2px solid #e0e0e0', paddingTop: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                  <h4 style={{ margin: 0, color: '#2c3e50' }}>신앙교육</h4>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEducationFormData({
+                        program_id: '',
+                        start_date: '',
+                        completion_date: '',
+                        completed: false,
+                        notes: ''
+                      });
+                      setEditingEducationId(null);
+                      setShowEducationForm(!showEducationForm);
+                    }}
+                    className="btn btn-secondary"
+                    style={{ fontSize: '14px', padding: '6px 12px' }}
+                  >
+                    {showEducationForm ? '취소' : '신앙교육 추가'}
+                  </button>
+                </div>
+
+                {/* 신앙교육 기록 목록 */}
+                {memberEducations.length > 0 && (
+                  <div style={{ marginBottom: '20px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '15px' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: '#f5f5f5' }}>
+                          <th style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'left' }}>교육명</th>
+                          <th style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'left' }}>시작일</th>
+                          <th style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'left' }}>완료일</th>
+                          <th style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center' }}>완료</th>
+                          <th style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'left' }}>비고</th>
+                          <th style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center' }}>작업</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {memberEducations.map(edu => (
+                          <tr key={edu.id}>
+                            <td style={{ padding: '10px', border: '1px solid #ddd' }}>{edu.program_name}</td>
+                            <td style={{ padding: '10px', border: '1px solid #ddd' }}>
+                              {edu.start_date ? new Date(edu.start_date).toLocaleDateString() : '-'}
+                            </td>
+                            <td style={{ padding: '10px', border: '1px solid #ddd' }}>
+                              {edu.completion_date ? new Date(edu.completion_date).toLocaleDateString() : '-'}
+                            </td>
+                            <td style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center' }}>
+                              {edu.completed ? '✓' : '-'}
+                            </td>
+                            <td style={{ padding: '10px', border: '1px solid #ddd' }}>{edu.notes || '-'}</td>
+                            <td style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center' }}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEducationFormData({
+                                    program_id: edu.program_id,
+                                    start_date: edu.start_date || '',
+                                    completion_date: edu.completion_date || '',
+                                    completed: edu.completed || false,
+                                    notes: edu.notes || ''
+                                  });
+                                  setEditingEducationId(edu.id);
+                                  setShowEducationForm(true);
+                                }}
+                                style={{ marginRight: '5px', padding: '4px 8px', fontSize: '12px' }}
+                                className="btn btn-secondary"
+                              >
+                                수정
+                              </button>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  if (window.confirm('이 신앙교육 기록을 삭제하시겠습니까?')) {
+                                    try {
+                                      await axios.delete(`${API_URL}/education/members/${editingId}/records/${edu.id}`);
+                                      fetchMemberEducations(editingId);
+                                      alert('신앙교육 기록이 삭제되었습니다.');
+                                    } catch (error) {
+                                      console.error('신앙교육 기록 삭제 오류:', error);
+                                      alert('신앙교육 기록 삭제에 실패했습니다.');
+                                    }
+                                  }
+                                }}
+                                style={{ padding: '4px 8px', fontSize: '12px' }}
+                                className="btn btn-delete"
+                              >
+                                삭제
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* 신앙교육 추가/수정 폼 */}
+                {showEducationForm && (
+                  <div style={{ 
+                    border: '1px solid #ddd', 
+                    borderRadius: '8px', 
+                    padding: '20px', 
+                    backgroundColor: '#f9f9f9',
+                    marginTop: '15px'
+                  }}>
+                    <h4 style={{ marginBottom: '15px' }}>
+                      {editingEducationId ? '신앙교육 수정' : '신앙교육 추가'}
+                    </h4>
+                    <div className="form-row form-row-1">
+                      <div className="form-group">
+                        <label>신앙교육 프로그램 *</label>
+                        <select
+                          value={educationFormData.program_id}
+                          onChange={(e) => setEducationFormData(prev => ({ ...prev, program_id: e.target.value }))}
+                          style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                          disabled={!!editingEducationId}
+                        >
+                          <option value="">선택하세요</option>
+                          {educationPrograms.map(program => (
+                            <option key={program.id} value={program.id}>{program.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="form-row form-row-2">
+                      <div className="form-group">
+                        <label>시작일</label>
+                        <input
+                          type="date"
+                          value={educationFormData.start_date}
+                          onChange={(e) => setEducationFormData(prev => ({ ...prev, start_date: e.target.value }))}
+                          style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>완료일</label>
+                        <input
+                          type="date"
+                          value={educationFormData.completion_date}
+                          onChange={(e) => setEducationFormData(prev => ({ ...prev, completion_date: e.target.value }))}
+                          style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                          disabled={!educationFormData.completed}
+                        />
+                      </div>
+                    </div>
+                    <div className="form-row form-row-1">
+                      <div className="form-group">
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={educationFormData.completed}
+                            onChange={(e) => {
+                              const completed = e.target.checked;
+                              setEducationFormData(prev => ({
+                                ...prev,
+                                completed,
+                                completion_date: completed && !prev.completion_date 
+                                  ? new Date().toISOString().split('T')[0] 
+                                  : prev.completion_date
+                              }));
+                            }}
+                            style={{ marginRight: '8px' }}
+                          />
+                          완료 여부
+                        </label>
+                      </div>
+                    </div>
+                    <div className="form-row form-row-1">
+                      <div className="form-group">
+                        <label>비고</label>
+                        <textarea
+                          value={educationFormData.notes}
+                          onChange={(e) => setEducationFormData(prev => ({ ...prev, notes: e.target.value }))}
+                          rows="3"
+                          placeholder="비고를 입력하세요..."
+                          style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                        />
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!educationFormData.program_id) {
+                            alert('신앙교육 프로그램을 선택해주세요.');
+                            return;
+                          }
+                          try {
+                            if (editingEducationId) {
+                              await axios.put(
+                                `${API_URL}/education/members/${editingId}/records/${editingEducationId}`,
+                                educationFormData
+                              );
+                              alert('신앙교육 기록이 수정되었습니다.');
+                            } else {
+                              await axios.post(
+                                `${API_URL}/education/members/${editingId}`,
+                                educationFormData
+                              );
+                              alert('신앙교육 기록이 추가되었습니다.');
+                            }
+                            fetchMemberEducations(editingId);
+                            setEducationFormData({
+                              program_id: '',
+                              start_date: '',
+                              completion_date: '',
+                              completed: false,
+                              notes: ''
+                            });
+                            setEditingEducationId(null);
+                            setShowEducationForm(false);
+                          } catch (error) {
+                            console.error('신앙교육 기록 저장 오류:', error);
+                            alert(error.response?.data?.error || '신앙교육 기록 저장에 실패했습니다.');
+                          }
+                        }}
+                        className="btn btn-primary"
+                      >
+                        {editingEducationId ? '수정' : '추가'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEducationFormData({
+                            program_id: '',
+                            start_date: '',
+                            completion_date: '',
+                            completed: false,
+                            notes: ''
+                          });
+                          setEditingEducationId(null);
+                          setShowEducationForm(false);
+                        }}
+                        className="btn btn-secondary"
+                      >
+                        취소
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* 관계 정보 */}
@@ -1790,6 +2759,19 @@ function MemberManagement() {
             <h3>기타 정보</h3>
             <div className="form-row form-row-1">
               <div className="form-group">
+                <label>특이사항</label>
+                <textarea
+                  name="notes"
+                  value={formData.notes}
+                  onChange={handleInputChange}
+                  rows="4"
+                  placeholder="특이사항을 입력하세요..."
+                  style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                />
+              </div>
+            </div>
+            <div className="form-row form-row-1">
+              <div className="form-group">
                 <label>활성 여부</label>
                 <div className="checkbox-container">
                   <input
@@ -1804,19 +2786,6 @@ function MemberManagement() {
                     {formData.active ? '활성' : '비활성'}
                   </label>
                 </div>
-              </div>
-            </div>
-            <div className="form-row form-row-1">
-              <div className="form-group">
-                <label>특이사항</label>
-                <textarea
-                  name="notes"
-                  value={formData.notes}
-                  onChange={handleInputChange}
-                  rows="4"
-                  placeholder="특이사항을 입력하세요..."
-                  style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
-                />
               </div>
             </div>
           </div>
@@ -3904,7 +4873,9 @@ function AttendanceManagement() {
   const fetchAllMembers = async () => {
     try {
       const response = await axios.get(`${API_URL}/members`);
-      setAllMembers(response.data || []);
+      // 활성화된 성도만 필터링
+      const activeMembers = (response.data || []).filter(member => member.active === 1 || member.active === true);
+      setAllMembers(activeMembers);
     } catch (error) {
       console.error('성도 목록 조회 오류:', error);
     }
@@ -3925,6 +4896,7 @@ function AttendanceManagement() {
     try {
       const response = await axios.get(`${API_URL}/attendance/events/${eventId}`);
       // 멤버 목록만 업데이트 (이벤트 정보는 handleEventSelect에서 이미 설정됨)
+      // 서버에서 이미 활성화된 성도만 필터링하므로 그대로 사용
       setMembers(response.data.allMembers || []);
     } catch (error) {
       console.error('출석부 조회 오류:', error);
